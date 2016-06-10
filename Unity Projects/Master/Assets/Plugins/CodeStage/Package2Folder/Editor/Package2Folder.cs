@@ -21,7 +21,7 @@ namespace CodeStage.PackageToFolder
 		#region reflection stuff
 
 #if !UNITY_5_3_PLUS
-		delegate AssetsItem[] ImportPackageStep1Delegate(string packagePath, out string packageIconPath);
+		private delegate AssetsItem[] ImportPackageStep1Delegate(string packagePath, out string packageIconPath);
 
 		private static Type assetServerType;
 		private static Type AssetServerType
@@ -68,7 +68,7 @@ namespace CodeStage.PackageToFolder
 			}
 		}
 #else
-		delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall);
+		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall);
 
 		private static Type packageUtilityType;
 		private static Type PackageUtilityType
@@ -114,6 +114,21 @@ namespace CodeStage.PackageToFolder
 			}
 		}
 
+		private static MethodInfo importPackageAssetsMethodInfo;
+		private static MethodInfo ImportPackageAssetsMethodInfo
+		{
+			get
+			{
+				if (importPackageAssetsMethodInfo == null)
+				{
+					importPackageAssetsMethodInfo = PackageUtilityType.GetMethod("ImportPackageAssets");
+				}
+
+				return importPackageAssetsMethodInfo;
+			}
+		}
+#endif
+
 		private static MethodInfo showImportPackageMethodInfo;
 		private static MethodInfo ShowImportPackageMethodInfo
 		{
@@ -128,21 +143,6 @@ namespace CodeStage.PackageToFolder
 				return showImportPackageMethodInfo;
 			}
 		}
-#endif
-
-		private static MethodInfo importPackageAssetsMethodInfo;
-		private static MethodInfo ImportPackageAssetsMethodInfo
-		{
-			get
-			{
-				if (importPackageAssetsMethodInfo == null)
-				{
-					importPackageAssetsMethodInfo = PackageUtilityType.GetMethod("ImportPackageAssets");
-				}
-
-				return importPackageAssetsMethodInfo;
-			}
-		}
 
 		#endregion reflection stuff
 
@@ -150,20 +150,20 @@ namespace CodeStage.PackageToFolder
 		// Unity Editor menus integration
 		///////////////////////////////////////////////////////////////
 
-		[MenuItem("Assets/Import Package/Custom to this folder...", true, 10)]
-		private static bool IsImportToFolderPossible()
+		[MenuItem("Assets/Import Package/Here...", true, 10)]
+		private static bool IsImportToFolderCheck()
 		{
 			string selectedFolderPath = GetSelectedFolderPath();
 			return !string.IsNullOrEmpty(selectedFolderPath);
 		}
 
-		[MenuItem("Assets/Import Package/Custom to this folder...", false, 10)]
-		private static void ImportToFolderCallback()
+		[MenuItem("Assets/Import Package/Here...", false, 10)]
+		private static void Package2FolderCommand()
 		{
 			string packagePath = EditorUtility.OpenFilePanel("Import package ...", "",  "unitypackage");
 			if (string.IsNullOrEmpty(packagePath)) return;
 			if (!File.Exists(packagePath)) return;
-
+			
 			string selectedFolderPath = GetSelectedFolderPath();
 			ImportPackageToFolder(packagePath, selectedFolderPath, true);
 		}
