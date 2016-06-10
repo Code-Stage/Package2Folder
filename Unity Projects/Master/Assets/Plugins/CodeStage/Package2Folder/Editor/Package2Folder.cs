@@ -1,4 +1,9 @@
-﻿using System;
+﻿#define UNITY_4_6_TO_5
+#if !(UNITY_4_6 || UNITY_4_7 || UNITY_4_8 || UNITY_4_9)
+#undef UNITY_4_6_TO_5
+#endif
+
+using System;
 using System.IO;
 using System.Reflection;
 using UnityEditor;
@@ -9,12 +14,11 @@ namespace CodeStage.PackageToFolder
 	public class Package2Folder
 	{
 
-#if UNITY_4_6
+#if UNITY_4_6_TO_5
 		delegate AssetsItem[] ImportPackageStep1Delegate(string packagePath, out string packageIconPath);
 #else
 		delegate object[] ExtractAndPrepareAssetListDel(string packagePath, out string packageIconPath, out bool allowReInstall);
 #endif
-
 
 		private static MethodInfo showImportPackageMethodInfo;
 		private static MethodInfo ShowImportPackageMethodInfo
@@ -130,7 +134,7 @@ namespace CodeStage.PackageToFolder
 
 		private static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
-#if UNITY_4_6
+#if UNITY_4_6_TO_5
 			AssetsItem item = (AssetsItem)assetItem;
 			item.exportedAssetPath = selectedFolderPath + item.exportedAssetPath.Remove(0, 6);
 			item.pathName = selectedFolderPath + item.pathName.Remove(0, 6);
@@ -146,7 +150,7 @@ namespace CodeStage.PackageToFolder
 
 		public static object[] ExtractAssetsFromPackage(string path, out string packageIconPath, out bool allowReInstall)
 		{
-#if UNITY_4_6
+#if UNITY_4_6_TO_5
 			AssetsItem[] array = ImportPackageStep1(path, out packageIconPath);
 			allowReInstall = false;
 			return array;
@@ -166,7 +170,7 @@ namespace CodeStage.PackageToFolder
 
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, bool allowReInstall)
 		{
-#if UNITY_4_6
+#if UNITY_4_6_TO_5
 			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath });
 #else
 			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath, allowReInstall });
@@ -177,7 +181,7 @@ namespace CodeStage.PackageToFolder
 
 		public static void ImportPackageSilently(object[] assetsItems)
 		{
-#if UNITY_4_6
+#if UNITY_4_6_TO_5
 			ImportPackageStep2MethodInfo.Invoke(null, new object[] { assetsItems, false });
 #else
 			Type packageUtility = typeof(MenuItem).Assembly.GetType("UnityEditor.PackageUtility");
