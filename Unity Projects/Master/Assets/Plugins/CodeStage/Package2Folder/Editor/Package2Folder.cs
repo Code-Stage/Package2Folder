@@ -1,6 +1,7 @@
-﻿#define UNITY_4_6_TO_5_2
-#if !(UNITY_4_6 || UNITY_4_7 || UNITY_4_8 || UNITY_4_9 || UNITY_5_0 || UNITY_5_1 || UNITY_5_2)
-#undef UNITY_4_6_TO_5_2
+﻿#define UNITY_5_3_PLUS
+
+#if UNITY_4_5 || UNITY_4_6 || UNITY_4_7 || UNITY_4_8 || UNITY_4_9 || UNITY_5_0 || UNITY_5_1 || UNITY_5_2
+#undef UNITY_5_3_PLUS
 #endif
 
 using System;
@@ -19,7 +20,7 @@ namespace CodeStage.PackageToFolder
 
 		#region reflection stuff
 
-#if UNITY_4_6_TO_5_2
+#if !UNITY_5_3_PLUS
 		delegate AssetsItem[] ImportPackageStep1Delegate(string packagePath, out string packageIconPath);
 
 		private static Type assetServerType;
@@ -204,7 +205,7 @@ namespace CodeStage.PackageToFolder
 
 		public static object[] ExtractAssetsFromPackage(string path, out string packageIconPath, out bool allowReInstall)
 		{
-#if UNITY_4_6_TO_5_2
+#if !UNITY_5_3_PLUS
 			AssetsItem[] array = ImportPackageStep1(path, out packageIconPath);
 			allowReInstall = false;
 			return array;
@@ -216,7 +217,7 @@ namespace CodeStage.PackageToFolder
 
 		private static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
-#if UNITY_4_6_TO_5_2
+#if !UNITY_5_3_PLUS
 			AssetsItem item = (AssetsItem)assetItem;
 			item.exportedAssetPath = selectedFolderPath + item.exportedAssetPath.Remove(0, 6);
 			item.pathName = selectedFolderPath + item.pathName.Remove(0, 6);
@@ -229,7 +230,7 @@ namespace CodeStage.PackageToFolder
 
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, bool allowReInstall)
 		{
-#if UNITY_4_6_TO_5_2
+#if !UNITY_5_3_PLUS
 			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath });
 #else
 			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath, allowReInstall });
@@ -238,7 +239,7 @@ namespace CodeStage.PackageToFolder
 
 		public static void ImportPackageSilently(object[] assetsItems)
 		{
-#if UNITY_4_6_TO_5_2
+#if !UNITY_5_3_PLUS
 			ImportPackageStep2MethodInfo.Invoke(null, new object[] { assetsItems, false });
 #else
 			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { assetsItems, false });
