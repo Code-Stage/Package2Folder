@@ -1,2 +1,6 @@
+1.0.1
+- update project to 2017.4 LTS
+- add Assembly Definition
+
 1.0.0
 - initial release
