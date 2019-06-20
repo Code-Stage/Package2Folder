@@ -68,7 +68,7 @@ namespace CodeStage.PackageToFolder
 			}
 		}
 #else
-		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall);
+		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall, out string packageManagerDependenciesPath);
 
 		private static Type packageUtilityType;
 		private static Type PackageUtilityType
@@ -183,8 +183,9 @@ namespace CodeStage.PackageToFolder
 		{
 			string packageIconPath;
 			bool allowReInstall;
+			string packageManagerDependenciesPath;
 
-			object[] assetsItems = ExtractAssetsFromPackage(packagePath, out packageIconPath, out allowReInstall);
+			object[] assetsItems = ExtractAssetsFromPackage(packagePath, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
 
 			if (assetsItems == null) return;
 
@@ -203,14 +204,14 @@ namespace CodeStage.PackageToFolder
 			}
 		}
 
-		public static object[] ExtractAssetsFromPackage(string path, out string packageIconPath, out bool allowReInstall)
+		public static object[] ExtractAssetsFromPackage(string path, out string packageIconPath, out bool allowReInstall, out string packageManagerDependenciesPath)
 		{
 #if !UNITY_5_3_PLUS
 			AssetsItem[] array = ImportPackageStep1(path, out packageIconPath);
 			allowReInstall = false;
 			return array;
 #else
-			object[] array = ExtractAndPrepareAssetList(path, out packageIconPath, out allowReInstall);
+			object[] array = ExtractAndPrepareAssetList(path, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
 			return array;
 #endif
 		}
