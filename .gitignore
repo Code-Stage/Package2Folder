@@ -13,14 +13,10 @@
 Thumbs.db
 Thumbs.db.meta
 
-Docs/~$*
-*UnityVS*
-
-Unity Projects/Master/Library/
-Unity Projects/Master/Temp/
-Unity Projects/Master/obj/
-
-Unity Projects/Master Unity*/
-Unity Projects/Master/Assets/Tests/
-
-Unity Projects/Master/Assets/AssetStoreTools*
+**/Docs/~$*
+**/.vs/
+**/Library/
+**/obj/
+**/Temp/
+**/AssetStoreTools*
+*/Package2Folder 20*
