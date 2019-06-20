@@ -1,6 +1,7 @@
 1.0.1
 - update project to 2017.4 LTS
 - add Assembly Definition
+- remove obsolete code for pre-Unity 5.3
 
 1.0.0
 - initial release
