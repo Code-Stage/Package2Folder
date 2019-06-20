@@ -2,6 +2,7 @@
 - update project to 2017.4 LTS
 - add Assembly Definition
 - remove obsolete code for pre-Unity 5.3
+- fix errors in Unity 2019.1.4+ (thx goldface)
 
 1.0.0
 - initial release

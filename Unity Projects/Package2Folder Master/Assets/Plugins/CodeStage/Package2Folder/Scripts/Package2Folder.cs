@@ -1,4 +1,10 @@
-﻿using System;
+﻿// new argument was added in 19.1.4
+
+#if UNITY_2019_1_OR_NEWER && !UNITY_2019_1_0 && !UNITY_2019_1_1 && !UNITY_2019_1_2 && !UNITY_2019_1_3
+#define CS_P2F_NEW_ARGUMENT
+#endif
+
+using System;
 using System.IO;
 using System.Reflection;
 using UnityEditor;
@@ -13,7 +19,11 @@ namespace CodeStage.PackageToFolder
 
 		#region reflection stuff
 
+#if CS_P2F_NEW_ARGUMENT
 		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall, out string packageManagerDependenciesPath);
+#else
+		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall);
+#endif
 
 		private static Type packageUtilityType;
 		private static Type PackageUtilityType
@@ -35,10 +45,16 @@ namespace CodeStage.PackageToFolder
 			{
 				if (extractAndPrepareAssetList == null)
 				{
+					var method = PackageUtilityType.GetMethod("ExtractAndPrepareAssetList");
+					if (method == null)
+					{
+						throw new Exception("Couldn't extract method with ExtractAndPrepareAssetListDelegate delegate!");
+					}
+
 					extractAndPrepareAssetList = (ExtractAndPrepareAssetListDelegate)Delegate.CreateDelegate(
 					   typeof(ExtractAndPrepareAssetListDelegate),
 					   null,
-					   PackageUtilityType.GetMethod("ExtractAndPrepareAssetList"));
+					   method);
 				}
 
 				return extractAndPrepareAssetList;
@@ -127,9 +143,13 @@ namespace CodeStage.PackageToFolder
 		{
 			string packageIconPath;
 			bool allowReInstall;
-			string packageManagerDependenciesPath;
 
-			var assetsItems = ExtractAssetsFromPackage(packagePath, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
+#if CS_P2F_NEW_ARGUMENT
+			string packageManagerDependenciesPath;
+			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
+#else
+			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out allowReInstall);
+#endif
 
 			if (assetsItems == null) return;
 
@@ -146,12 +166,6 @@ namespace CodeStage.PackageToFolder
 			{
 				ImportPackageSilently(assetsItems);
 			}
-		}
-
-		public static object[] ExtractAssetsFromPackage(string path, out string packageIconPath, out bool allowReInstall, out string packageManagerDependenciesPath)
-		{
-			var array = ExtractAndPrepareAssetList(path, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
-			return array;
 		}
 
 		private static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
