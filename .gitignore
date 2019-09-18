@@ -20,3 +20,5 @@ Thumbs.db.meta
 **/Temp/
 **/AssetStoreTools*
 */Package2Folder 20*
+**/.idea/
+JetBrains.Rider.Unity.Editor.Plugin.Repacked.dll
