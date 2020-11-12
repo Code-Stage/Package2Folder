@@ -1,6 +1,8 @@
 ﻿// new argument was added in 19.1.4
 
-#if (UNITY_2019_1_OR_NEWER && !UNITY_2019_1_0 && !UNITY_2019_1_1 && !UNITY_2019_1_2 && !UNITY_2019_1_3) || (UNITY_2018_4_OR_NEWER && !UNITY_2018_4_0 && !UNITY_2018_4_1 && !UNITY_2018_4_2)
+#if UNITY_2019_3_OR_NEWER
+#define CS_P2F_NEW_ARGUMENT_2
+#elif (UNITY_2019_1_OR_NEWER && !UNITY_2019_1_0 && !UNITY_2019_1_1 && !UNITY_2019_1_2 && !UNITY_2019_1_3) || (UNITY_2018_4_OR_NEWER && !UNITY_2018_4_0 && !UNITY_2018_4_1 && !UNITY_2018_4_2)
 #define CS_P2F_NEW_ARGUMENT
 #endif
 
@@ -11,7 +13,7 @@ using UnityEditor;
 
 namespace CodeStage.PackageToFolder
 {
-	public class Package2Folder
+	public static class Package2Folder
 	{
 		///////////////////////////////////////////////////////////////
 		// Delegates and properties with caching for reflection stuff
@@ -19,7 +21,9 @@ namespace CodeStage.PackageToFolder
 
 		#region reflection stuff
 
-#if CS_P2F_NEW_ARGUMENT
+#if CS_P2F_NEW_ARGUMENT_2
+		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out string packageManagerDependenciesPath);
+#elif CS_P2F_NEW_ARGUMENT
 		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall, out string packageManagerDependenciesPath);
 #else
 		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall);
@@ -142,12 +146,15 @@ namespace CodeStage.PackageToFolder
 		public static void ImportPackageToFolder(string packagePath, string selectedFolderPath, bool interactive)
 		{
 			string packageIconPath;
+#if CS_P2F_NEW_ARGUMENT_2
+			string packageManagerDependenciesPath;
+			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out packageManagerDependenciesPath);
+#elif CS_P2F_NEW_ARGUMENT
 			bool allowReInstall;
-
-#if CS_P2F_NEW_ARGUMENT
 			string packageManagerDependenciesPath;
 			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
 #else
+			bool allowReInstall;
 			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out allowReInstall);
 #endif
 
@@ -160,7 +167,12 @@ namespace CodeStage.PackageToFolder
 
 			if (interactive)
 			{
+#if CS_P2F_NEW_ARGUMENT_2
+				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath);
+#else	
 				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, allowReInstall);
+#endif
+
 			}
 			else
 			{
@@ -174,11 +186,17 @@ namespace CodeStage.PackageToFolder
 			destinationPath = selectedFolderPath + destinationPath.Remove(0, 6);
 			DestinationAssetPathFieldInfo.SetValue(assetItem, destinationPath);
 		}
-
+#if CS_P2F_NEW_ARGUMENT_2
+		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath)
+		{
+			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath });
+		}
+#else
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, bool allowReInstall)
 		{
 			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath, allowReInstall });
 		}
+#endif
 
 		public static void ImportPackageSilently(object[] assetsItems)
 		{
