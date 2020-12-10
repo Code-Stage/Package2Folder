@@ -183,7 +183,7 @@ namespace CodeStage.PackageToFolder
 		private static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
 			var destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
-			destinationPath = selectedFolderPath + destinationPath.Remove(0, 6);
+			destinationPath = selectedFolderPath + destinationPath.Remove(0, destinationPath.IndexOf('/'));
 			DestinationAssetPathFieldInfo.SetValue(assetItem, destinationPath);
 		}
 #if CS_P2F_NEW_ARGUMENT_2

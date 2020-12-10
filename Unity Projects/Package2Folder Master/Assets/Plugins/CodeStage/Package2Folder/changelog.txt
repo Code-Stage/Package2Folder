@@ -1,3 +1,6 @@
+1.0.4
+- fix incorrect path processing in case package was exported not from the Assets folder (thx vestigialdev)
+
 1.0.3
 - fix reflection errors in Unity 2019.3+ (thx viktorkadza)
 
