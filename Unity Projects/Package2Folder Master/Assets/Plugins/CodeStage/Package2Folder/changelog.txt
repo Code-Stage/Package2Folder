@@ -1,3 +1,6 @@
+1.0.5
+- fix exception when using ImportPackageToFolder with interactive == false (thx Vipul Tyagi)
+
 1.0.4
 - fix incorrect path processing in case package was exported not from the Assets folder (thx vestigialdev)
 

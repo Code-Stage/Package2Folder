@@ -6,6 +6,10 @@
 #define CS_P2F_NEW_ARGUMENT
 #endif
 
+#if UNITY_2019_3_OR_NEWER
+#define CS_P2F_NEW_NON_INTERACTIVE_LOGIC
+#endif
+
 using System;
 using System.IO;
 using System.Reflection;
@@ -176,7 +180,8 @@ namespace CodeStage.PackageToFolder
 			}
 			else
 			{
-				ImportPackageSilently(assetsItems);
+				var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(packagePath);
+				ImportPackageSilently(fileNameWithoutExtension, assetsItems);
 			}
 		}
 
@@ -198,9 +203,13 @@ namespace CodeStage.PackageToFolder
 		}
 #endif
 
-		public static void ImportPackageSilently(object[] assetsItems)
+		public static void ImportPackageSilently(string packageName, object[] assetsItems)
 		{
-			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { assetsItems, false });
+#if CS_P2F_NEW_NON_INTERACTIVE_LOGIC
+			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems });
+#else
+			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems, false });
+#endif
 		}
 
 		///////////////////////////////////////////////////////////////
