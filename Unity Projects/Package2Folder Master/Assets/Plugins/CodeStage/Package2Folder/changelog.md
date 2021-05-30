@@ -1,3 +1,10 @@
+# Package2Folder Changelog
+Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [1.0.6] - 2021-05-30
+### Fixed
+- Fix plugin did not work correctly with two-column project view (thx madc0der)
+
 1.0.5
 - fix exception when using ImportPackageToFolder with interactive == false (thx Vipul Tyagi)
 
