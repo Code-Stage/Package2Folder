@@ -218,10 +218,11 @@ namespace CodeStage.PackageToFolder
 
 		private static string GetSelectedFolderPath()
 		{
-			var obj = Selection.activeObject;
-			if (obj == null) return null;
+			if (Selection.assetGUIDs == null || Selection.assetGUIDs.Length == 0)
+				return null;
 
-			var path = AssetDatabase.GetAssetPath(obj.GetInstanceID());
+			var assetGuid = Selection.assetGUIDs[0];
+			var path = AssetDatabase.GUIDToAssetPath(assetGuid);
 			return !Directory.Exists(path) ? null : path;
 		}
 	}
