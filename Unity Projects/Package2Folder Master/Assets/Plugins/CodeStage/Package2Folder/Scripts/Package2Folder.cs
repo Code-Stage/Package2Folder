@@ -191,7 +191,7 @@ namespace CodeStage.PackageToFolder
 			ShowImportPackageMethodInfo.Invoke(null, new object[]
 			{
 #if UNITY_2023_1_OR_NEWER
-				path, array, packageIconPath, 0, null, null, 0
+				path, array, packageIconPath, default, default, default, default
 #else
 				path, array, packageIconPath
 #endif
