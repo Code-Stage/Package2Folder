@@ -1,6 +1,14 @@
 # Package2Folder Changelog
 Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.1.0] - 2022-12-20
+### Added
+- Add Unity 2023 support (at least for 2023 alpha)
+
+### Removed
+- Remove some legacy projects
+- Remove legacy AssetStoreTools
+
 ## [1.0.6] - 2021-05-30
 ### Fixed
 - Fix plugin did not work correctly with two-column project view (thx madc0der)
