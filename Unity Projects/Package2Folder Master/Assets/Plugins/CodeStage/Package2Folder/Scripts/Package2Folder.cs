@@ -39,9 +39,7 @@ namespace CodeStage.PackageToFolder
 			get
 			{
 				if (packageUtilityType == null)
-				{
 					packageUtilityType = typeof(MenuItem).Assembly.GetType("UnityEditor.PackageUtility");
-				}
 				return packageUtilityType;
 			}
 		}
@@ -55,9 +53,7 @@ namespace CodeStage.PackageToFolder
 				{
 					var method = PackageUtilityType.GetMethod("ExtractAndPrepareAssetList");
 					if (method == null)
-					{
 						throw new Exception("Couldn't extract method with ExtractAndPrepareAssetListDelegate delegate!");
-					}
 
 					extractAndPrepareAssetList = (ExtractAndPrepareAssetListDelegate)Delegate.CreateDelegate(
 					   typeof(ExtractAndPrepareAssetListDelegate),
@@ -89,9 +85,7 @@ namespace CodeStage.PackageToFolder
 			get
 			{
 				if (importPackageAssetsMethodInfo == null)
-				{
 					importPackageAssetsMethodInfo = PackageUtilityType.GetMethod("ImportPackageAssets");
-				}
 
 				return importPackageAssetsMethodInfo;
 			}
@@ -194,7 +188,15 @@ namespace CodeStage.PackageToFolder
 #if CS_P2F_NEW_ARGUMENT_2
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath)
 		{
-			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath });
+			ShowImportPackageMethodInfo.Invoke(null, new object[]
+			{
+#if UNITY_2023_1_OR_NEWER
+				path, array, packageIconPath, 0, null, null, 0
+#else
+				path, array, packageIconPath
+#endif
+				
+			});
 		}
 #else
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, bool allowReInstall)
