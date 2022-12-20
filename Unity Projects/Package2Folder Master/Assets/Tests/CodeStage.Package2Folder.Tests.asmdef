@@ -1,0 +1,10 @@
+{
+    "name": "CodeStage.Package2Folder.Tests",
+    "references": [
+        "CodeStage.Package2Folder"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}

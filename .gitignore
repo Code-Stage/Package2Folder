@@ -7,6 +7,8 @@
 *.userprefs
 *.user
 *.tmp
+*.log
+
 .DS_Store
 .DS_Store?
 .DS_Store.meta
@@ -18,7 +20,9 @@ Thumbs.db.meta
 **/Library/
 **/obj/
 **/Temp/
-**/AssetStoreTools*
-*/Package2Folder 20*
-**/.idea/
+**/Builds/
+**/.idea/*
+**/JetBrains*
 JetBrains.Rider.Unity.Editor.Plugin.Repacked.dll*
+UserSettings/
+com.unity.asset-store-tools
