@@ -91,6 +91,18 @@ namespace CodeStage.PackageToFolder
 			}
 		}
 
+		private static MethodInfo importPackageAssetsWithOriginMethodInfo;
+		private static MethodInfo ImportPackageAssetsWithOriginMethodInfo
+		{
+			get
+			{
+				if (importPackageAssetsWithOriginMethodInfo == null)
+					importPackageAssetsWithOriginMethodInfo = PackageUtilityType.GetMethod("ImportPackageAssetsWithOrigin");
+
+				return importPackageAssetsWithOriginMethodInfo;
+			}
+		}
+
 		private static MethodInfo showImportPackageMethodInfo;
 		private static MethodInfo ShowImportPackageMethodInfo
 		{
@@ -141,7 +153,7 @@ namespace CodeStage.PackageToFolder
 		/// <param name="selectedFolderPath">Path to the target folder where you wish to import package into.
 		/// Relative to the project folder (should start with 'Assets')</param>
 		/// <param name="interactive">If true - imports using standard import window, otherwise does this silently.</param>
-		public static void ImportPackageToFolder(string packagePath, string selectedFolderPath, bool interactive)
+		public static void ImportPackageToFolder(string packagePath, string selectedFolderPath, bool interactive, object assetOrigin = null)
 		{
 			string packageIconPath;
 #if CS_P2F_NEW_ARGUMENT_2
@@ -158,7 +170,7 @@ namespace CodeStage.PackageToFolder
 
 			if (assetsItems == null) return;
 
-			foreach (var item in assetsItems)
+			foreach (object item in assetsItems)
 			{
 				ChangeAssetItemPath(item, selectedFolderPath);
 			}
@@ -166,7 +178,7 @@ namespace CodeStage.PackageToFolder
 			if (interactive)
 			{
 #if CS_P2F_NEW_ARGUMENT_2
-				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath);
+				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, assetOrigin);
 #else	
 				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, allowReInstall);
 #endif
@@ -175,28 +187,50 @@ namespace CodeStage.PackageToFolder
 			else
 			{
 				var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(packagePath);
-				ImportPackageSilently(fileNameWithoutExtension, assetsItems);
+				ImportPackageSilently(fileNameWithoutExtension, assetsItems, assetOrigin);
 			}
 		}
 
 		private static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
-			var destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
+			string destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
 			destinationPath = selectedFolderPath + destinationPath.Remove(0, destinationPath.IndexOf('/'));
 			DestinationAssetPathFieldInfo.SetValue(assetItem, destinationPath);
 		}
+		
 #if CS_P2F_NEW_ARGUMENT_2
-		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath)
+		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, object assetOrigin)
 		{
+#if UNITY_2023_1_OR_NEWER
+			int productId = 0;
+			string packageName = null;
+			string packageVersion = null;
+			int uploadId = 0;
+			if (assetOrigin != null) {
+				Type assetOriginType = Type.GetType("UnityEditor.AssetOrigin, UnityEditor.CoreModule");
+				if (assetOriginType != null)
+				{
+					FieldInfo productIdProp = assetOriginType.GetField("productId");
+					FieldInfo packageVersionProp = assetOriginType.GetField("packageVersion");
+					FieldInfo packageNameProp = assetOriginType.GetField("packageName");
+					FieldInfo uploadIdProp = assetOriginType.GetField("uploadId");
+
+					if (productIdProp != null) productId = productIdProp.GetValue(assetOrigin) as int? ?? 0;
+					if (packageVersionProp != null) packageVersion = packageVersionProp.GetValue(assetOrigin) as string;
+					if (packageNameProp != null) packageName = packageNameProp.GetValue(assetOrigin) as string;
+					if (uploadIdProp != null) uploadId = uploadIdProp.GetValue(assetOrigin) as int? ?? 0;
+				}
+			}
 			ShowImportPackageMethodInfo.Invoke(null, new object[]
 			{
-#if UNITY_2023_1_OR_NEWER
-				path, array, packageIconPath, default, default, default, default
-#else
-				path, array, packageIconPath
-#endif
-				
+				path, array, packageIconPath, productId, packageName, packageVersion, uploadId
 			});
+#else
+			ShowImportPackageMethodInfo.Invoke(null, new object[]
+			{
+				path, array, packageIconPath
+			});
+#endif
 		}
 #else
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, bool allowReInstall)
@@ -205,10 +239,17 @@ namespace CodeStage.PackageToFolder
 		}
 #endif
 
-		public static void ImportPackageSilently(string packageName, object[] assetsItems)
+		public static void ImportPackageSilently(string packageName, object[] assetsItems, object assetOrigin = null)
 		{
 #if CS_P2F_NEW_NON_INTERACTIVE_LOGIC
-			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems });
+			if (assetOrigin != null)
+			{
+				ImportPackageAssetsWithOriginMethodInfo.Invoke(null, new[] {assetOrigin, assetsItems});
+			}
+			else
+			{
+				ImportPackageAssetsMethodInfo.Invoke(null, new object[] {packageName, assetsItems});
+			}
 #else
 			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems, false });
 #endif
