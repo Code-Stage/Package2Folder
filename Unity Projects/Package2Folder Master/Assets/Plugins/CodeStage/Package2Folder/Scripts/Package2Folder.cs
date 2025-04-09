@@ -145,7 +145,7 @@ namespace CodeStage.PackageToFolder
 		///////////////////////////////////////////////////////////////
 		// Main logic
 		///////////////////////////////////////////////////////////////
-		
+
 		/// <summary>
 		/// Allows to import package to the specified folder either via standard import window or silently.
 		/// </summary>
@@ -153,6 +153,7 @@ namespace CodeStage.PackageToFolder
 		/// <param name="selectedFolderPath">Path to the target folder where you wish to import package into.
 		/// Relative to the project folder (should start with 'Assets')</param>
 		/// <param name="interactive">If true - imports using standard import window, otherwise does this silently.</param>
+		/// <param name="assetOrigin">An optional UnityEditor.AssetOrigin object which Unity from version 2023+ uses internally to store the source of the imported asset inside the meta file.</param>
 		public static void ImportPackageToFolder(string packagePath, string selectedFolderPath, bool interactive, object assetOrigin = null)
 		{
 			string packageIconPath;
@@ -194,12 +195,14 @@ namespace CodeStage.PackageToFolder
 		private static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
 			string destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
+			if (destinationPath.StartsWith("Packages/")) return;
+			
 			destinationPath = selectedFolderPath + destinationPath.Remove(0, destinationPath.IndexOf('/'));
 			DestinationAssetPathFieldInfo.SetValue(assetItem, destinationPath);
 		}
 		
 #if CS_P2F_NEW_ARGUMENT_2
-		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, object assetOrigin)
+		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, object assetOrigin = null)
 		{
 #if UNITY_2023_1_OR_NEWER
 			int productId = 0;
