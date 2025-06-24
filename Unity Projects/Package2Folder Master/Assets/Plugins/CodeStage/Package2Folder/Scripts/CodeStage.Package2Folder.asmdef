@@ -1,8 +1,0 @@
-{
-    "name": "CodeStage.Package2Folder",
-    "references": [],
-    "includePlatforms": [
-        "Editor"
-    ],
-    "excludePlatforms": []
-}
