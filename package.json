@@ -1,0 +1,22 @@
+{
+  "name": "net.codestage.package2folder",
+  "version": "1.2.0",
+  "displayName": "Package2Folder",
+  "description": "Unity Editor extension that allows you to import custom packages into the selected Project folder, avoiding your project's root bloating.",
+  "unity": "2021.3",
+  "author": {
+    "name": "CodeStage",
+    "url": "https://github.com/Code-Stage/Package2Folder"
+  },
+  "license": "MPL-2.0",
+  "keywords": [
+    "editor",
+    "package",
+    "import",
+    "utility"
+  ],
+  "type": "tool",
+  "testables": [
+    "net.codestage.package2folder"
+  ]
+} 
