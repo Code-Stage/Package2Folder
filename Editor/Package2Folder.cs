@@ -197,7 +197,17 @@ namespace CodeStage.PackageToFolder
 			string destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
 			if (destinationPath.StartsWith("Packages/")) return;
 			
-			destinationPath = selectedFolderPath + destinationPath.Remove(0, destinationPath.IndexOf('/'));
+			int firstSlashIndex = destinationPath.IndexOf('/');
+			if (firstSlashIndex >= 0)
+			{
+				string relativePath = destinationPath.Substring(firstSlashIndex);
+				destinationPath = selectedFolderPath + relativePath;
+			}
+			else
+			{
+				destinationPath = selectedFolderPath + "/" + destinationPath;
+			}
+			
 			DestinationAssetPathFieldInfo.SetValue(assetItem, destinationPath);
 		}
 		

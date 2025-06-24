@@ -13,8 +13,12 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 
 ## [1.2.0] - 2025-06-24
 
+### Added
+- Add assetOrigin argument support to ImportPackageToFolder API (@rwetzold)
+
 ### Changed
 - Refactor asset into UPM package, can add to the project now with direct git link
+- Improve paths handling
 
 ## [1.1.0] - 2022-12-20
 
