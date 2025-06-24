@@ -15,5 +15,8 @@
     "import",
     "utility"
   ],
-  "type": "tool"
+  "type": "tool",
+  "testables": [
+    "net.codestage.package2folder"
+  ]
 } 
