@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿#if HAS_TEST_FRAMEWORK
+using System.Collections;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor;
@@ -179,3 +180,4 @@ namespace CodeStage.PackageToFolder.Tests
 		}
 	}
 }
+#endif

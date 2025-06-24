@@ -1,5 +1,6 @@
 {
     "name": "CodeStage.PackageToFolder.Editor.Tests",
+    "rootNamespace": "",
     "references": [
         "CodeStage.PackageToFolder.Editor",
         "UnityEngine.TestRunner",
@@ -16,6 +17,12 @@
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
     ],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "HAS_TEST_FRAMEWORK"
+        }
+    ],
     "noEngineReferences": false
-} 
+}
