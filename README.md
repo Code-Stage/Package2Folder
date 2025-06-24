@@ -1,5 +1,10 @@
 # Package2Folder
 
+[![Unity Version](https://img.shields.io/badge/Unity-2020.3%2B-blue?logo=unity)](https://unity.com/)
+[![License](https://img.shields.io/badge/License-MPL--2.0-orange)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/Code-Stage/Package2Folder)](https://github.com/Code-Stage/Package2Folder/releases)
+[![Discord](https://img.shields.io/discord/847940058476052491?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/Ppsb89naWf)
+
 Unity Editor extension that allows you to import custom packages into the selected Project folder, avoiding your project's root bloating.
 
 ## Description
@@ -48,6 +53,11 @@ Package2Folder.ImportPackageToFolder(packagePath, targetFolderPath, true);
 // Import package silently
 Package2Folder.ImportPackageToFolder(packagePath, targetFolderPath, false);
 ```
+
+## Support
+
+💬 [Discussions thread](https://discussions.unity.com/t/package2folder-free/630412)  
+🎮 [Discord](https://discord.gg/Ppsb89naWf)
 
 ## Changelog
 
