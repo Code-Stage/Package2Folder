@@ -124,14 +124,14 @@ namespace CodeStage.PackageToFolder
 		// Unity Editor menus integration
 		///////////////////////////////////////////////////////////////
 
-		[MenuItem("Assets/Import Package/Here...", true, 10)]
+		[MenuItem("Assets/Import Package/Here...", true)]
 		private static bool IsImportToFolderCheck()
 		{
 			var selectedFolderPath = GetSelectedFolderPath();
 			return !string.IsNullOrEmpty(selectedFolderPath);
 		}
 
-		[MenuItem("Assets/Import Package/Here...", false, 10)]
+		[MenuItem("Assets/Import Package/Here...", false)]
 		private static void Package2FolderCommand()
 		{
 			var packagePath = EditorUtility.OpenFilePanel("Import package ...", "",  "unitypackage");
