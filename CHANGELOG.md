@@ -11,6 +11,11 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 
 💡 _Always remove previous plugin version before updating_
 
+## [1.2.1] - 2025-08-15
+
+### Fixed
+- Fix package affected import menu placement in Unity 6.2 and newer (thx Impossible Robert)
+
 ## [1.2.0] - 2025-06-24
 
 ### Added
