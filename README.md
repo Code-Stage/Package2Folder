@@ -43,6 +43,8 @@ Download the latest `.unitypackage` file from the [Releases](https://github.com/
 
 ### Option B: Via companion window (any import method)
 
+<img width="200" alt="image" src="https://github.com/user-attachments/assets/eb927279-1df0-43c7-9b28-7046d8a398be" />
+
 Whenever Unity's import dialog opens — whether from **Package Manager > My Assets**, drag-and-drop, or the Assets menu — a small **Package2Folder** utility window automatically appears next to it:
 
 1. Trigger a `.unitypackage` import from any source (e.g. Package Manager "My Assets" tab)
