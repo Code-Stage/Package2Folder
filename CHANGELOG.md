@@ -11,6 +11,11 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 
 💡 _Always remove previous plugin version before updating_
 
+## [1.3.0] - 2026-02-13
+
+### Added
+- Add companion window that auto-appears alongside Unity's import dialog, allowing you to redirect any .unitypackage import to a specific folder — works with Package Manager "My Assets" imports, drag-and-drop, and the Assets menu (closes #6)
+
 ## [1.2.1] - 2025-08-15
 
 ### Fixed

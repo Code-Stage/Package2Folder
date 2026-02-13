@@ -34,11 +34,22 @@ Download the latest `.unitypackage` file from the [Releases](https://github.com/
 
 ## How to use
 
-1. Import the package to your project using one of the installation methods above
-2. In the Project window, select the folder where you want to import a package
-3. Use the menu item: `Assets > Import Package > Here...`
-4. Select the `.unitypackage` file you want to import
-5. The package will be imported into the selected folder instead of the project root
+### Option A: Via right-click menu (select folder first)
+
+1. In the Project window, select the folder where you want to import a package
+2. Use the menu item: `Assets > Import Package > Here...`
+3. Select the `.unitypackage` file you want to import
+4. The package will be imported into the selected folder instead of the project root
+
+### Option B: Via companion window (any import method)
+
+Whenever Unity's import dialog opens — whether from **Package Manager > My Assets**, drag-and-drop, or the Assets menu — a small **Package2Folder** utility window automatically appears next to it:
+
+1. Trigger a `.unitypackage` import from any source (e.g. Package Manager "My Assets" tab)
+2. In the companion window that appears, click **"Import to Folder..."**
+3. Select the target folder under Assets/
+4. The import dialog updates to show the new destination paths
+5. Click **Import** in the import dialog as usual
 
 ## Public API
 
