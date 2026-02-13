@@ -112,8 +112,7 @@ namespace CodeStage.PackageToFolder
 			{
 				if (showImportPackageMethodInfo == null)
 				{
-					var packageImport = typeof(MenuItem).Assembly.GetType("UnityEditor.PackageImport");
-					showImportPackageMethodInfo = packageImport.GetMethod("ShowImportPackage");
+					showImportPackageMethodInfo = PackageImportType.GetMethod("ShowImportPackage");
 				}
 
 				return showImportPackageMethodInfo;
@@ -166,8 +165,13 @@ namespace CodeStage.PackageToFolder
 			EditorApplication.update += WatchForPackageImportWindows;
 		}
 
+		private static double nextWatchTime;
+
 		private static void WatchForPackageImportWindows()
 		{
+			if (EditorApplication.timeSinceStartup < nextWatchTime) return;
+			nextWatchTime = EditorApplication.timeSinceStartup + 0.25;
+
 			var windows = Resources.FindObjectsOfTypeAll(PackageImportType);
 			if (windows == null || windows.Length == 0) return;
 
@@ -253,6 +257,9 @@ namespace CodeStage.PackageToFolder
 
 		public static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
+			if (string.IsNullOrEmpty(selectedFolderPath) || !selectedFolderPath.StartsWith("Assets"))
+				throw new ArgumentException("selectedFolderPath must start with 'Assets'", "selectedFolderPath");
+
 			string destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
 			if (destinationPath.StartsWith("Packages/")) return;
 
@@ -392,6 +399,7 @@ namespace CodeStage.PackageToFolder
 	internal class Package2FolderCompanion : EditorWindow
 	{
 		private static readonly Dictionary<int, Package2FolderCompanion> activeCompanions = new Dictionary<int, Package2FolderCompanion>();
+		private static readonly HashSet<int> dismissedImportWindows = new HashSet<int>();
 
 		[SerializeField] private EditorWindow importWindow;
 		[SerializeField] private string[] originalPaths;
@@ -400,6 +408,11 @@ namespace CodeStage.PackageToFolder
 		internal static void ShowForImportWindow(EditorWindow importWindow)
 		{
 			var id = importWindow.GetInstanceID();
+
+			if (dismissedImportWindows.Contains(id))
+				return;
+
+			ClearStaleEntries();
 
 			Package2FolderCompanion existing;
 			if (activeCompanions.TryGetValue(id, out existing) && existing != null)
@@ -412,6 +425,21 @@ namespace CodeStage.PackageToFolder
 			companion.ShowUtility();
 			companion.PositionNearImportWindow();
 			activeCompanions[id] = companion;
+		}
+
+		private static void ClearStaleEntries()
+		{
+			var staleKeys = new List<int>();
+			foreach (var kvp in activeCompanions)
+			{
+				if (kvp.Value == null || kvp.Value.importWindow == null)
+					staleKeys.Add(kvp.Key);
+			}
+			foreach (var key in staleKeys)
+			{
+				activeCompanions.Remove(key);
+				dismissedImportWindows.Remove(key);
+			}
 		}
 
 		private void CacheOriginalPaths()
@@ -463,6 +491,7 @@ namespace CodeStage.PackageToFolder
 		{
 			var absolutePath = EditorUtility.OpenFolderPanel("Select target folder", "Assets", "");
 			if (string.IsNullOrEmpty(absolutePath)) return;
+			if (importWindow == null) return;
 
 			absolutePath = absolutePath.Replace('\\', '/');
 			var dataPath = Application.dataPath.Replace('\\', '/');
@@ -491,7 +520,12 @@ namespace CodeStage.PackageToFolder
 		private void OnDestroy()
 		{
 			if (importWindow != null)
-				activeCompanions.Remove(importWindow.GetInstanceID());
+			{
+				var id = importWindow.GetInstanceID();
+				activeCompanions.Remove(id);
+				// Import window still alive means user dismissed companion manually
+				dismissedImportWindows.Add(id);
+			}
 		}
 	}
 }
