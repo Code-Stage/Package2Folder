@@ -32,6 +32,10 @@ See detailed API description in code.
 
 Download the latest `.unitypackage` file from the [Releases](https://github.com/Code-Stage/Package2Folder/releases) section and import it into your project.
 
+### Option 3: Unity Asset Store
+
+Import from the [Unity Asset Store](https://assetstore.unity.com/packages/slug/64829).
+
 ## How to use
 
 ### Option A: Via right-click menu (select folder first)
