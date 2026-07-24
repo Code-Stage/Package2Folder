@@ -14,6 +14,7 @@ namespace CodeStage.PackageToFolder.Tests
 		private const string TestAssetContent = "This is a test asset for Package2Folder testing";
 		private const string TestFolderName = "Package2FolderTest";
 		private const string ImportTargetFolder = "ImportedAssets";
+		private const double ImportTimeoutSeconds = 60;
 		
 		private string testAssetPath;
 		private string testFolderPath;
@@ -93,9 +94,19 @@ namespace CodeStage.PackageToFolder.Tests
 			}
 			
 			Package2Folder.ImportPackageToFolder(tempPackagePath, importTargetPath, false);
-			
+
 			AssetDatabase.Refresh();
-			yield return null;
+
+			// Silent import completes asynchronously on some Unity versions (observed on 6000.1+),
+			// so wait for the imported file instead of a fixed number of frames.
+			string expectedImportedAssetPath = Path.Combine(importTargetPath, TestFolderName, TestAssetName);
+			double deadline = EditorApplication.timeSinceStartup + ImportTimeoutSeconds;
+			while (!File.Exists(expectedImportedAssetPath) && EditorApplication.timeSinceStartup < deadline)
+			{
+				yield return null;
+			}
+
+			AssetDatabase.Refresh();
 			yield return null;
 		}
 

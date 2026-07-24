@@ -57,6 +57,14 @@ Whenever Unity's import dialog opens — whether from **Package Manager > My Ass
 4. The import dialog updates to show the new destination paths
 5. Click **Import** in the import dialog as usual
 
+### Setting a default folder
+
+If your packages usually land in the same folder, set it once in `Edit > Preferences > Package2Folder` (for example, `Assets/ThirdParty`).
+
+With a default folder set, the companion window redirects import paths to it as soon as Unity's import dialog opens. The window shows the current target and a **Restore Original Paths** button for cases when one particular package should stay where it was. The folder picker also starts at the default folder.
+
+Imports started via `Assets > Import Package > Here...` are not affected: the folder you select there always wins over the default.
+
 ## Public API
 
 The package exposes a public API that allows you to import packages programmatically:

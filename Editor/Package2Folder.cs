@@ -173,7 +173,27 @@ namespace CodeStage.PackageToFolder
 			nextWatchTime = EditorApplication.timeSinceStartup + 0.25;
 
 			var windows = Resources.FindObjectsOfTypeAll(PackageImportType);
-			if (windows == null || windows.Length == 0) return;
+			if (windows == null || windows.Length == 0)
+			{
+				// No import windows left: any not-yet-consumed explicit-import
+				// state belongs to windows that never got a companion, and kept
+				// dismiss marks could block a companion for a recycled window ID.
+				ClearPendingImportState();
+				Package2FolderCompanion.ClearDismissedWindows();
+				return;
+			}
+
+			// Drop bookkeeping for registered windows that closed before a companion
+			// consumed it, so a recycled instance ID can't inherit another window's state.
+			if (HasPendingImportState)
+			{
+				var liveIds = new HashSet<int>();
+				foreach (var window in windows)
+				{
+					liveIds.Add(window.GetInstanceID());
+				}
+				PruneStalePendingImportState(liveIds);
+			}
 
 			foreach (var window in windows)
 			{
@@ -215,7 +235,9 @@ namespace CodeStage.PackageToFolder
 		/// <param name="packagePath">Native path to the package.</param>
 		/// <param name="selectedFolderPath">Path to the target folder where you wish to import package into.
 		/// Relative to the project folder (should start with 'Assets')</param>
-		/// <param name="interactive">If true - imports using standard import window, otherwise does this silently.</param>
+		/// <param name="interactive">If true - imports using standard import window, otherwise does this silently.
+		/// The companion window will not auto-apply the configured default folder to an import window
+		/// opened this way, since the folder was chosen explicitly.</param>
 		/// <param name="assetOrigin">An optional UnityEditor.AssetOrigin object which Unity from version 2023+ uses internally to store the source of the imported asset inside the meta file.</param>
 		public static void ImportPackageToFolder(string packagePath, string selectedFolderPath, bool interactive, object assetOrigin = null)
 		{
@@ -234,6 +256,12 @@ namespace CodeStage.PackageToFolder
 
 			if (assetsItems == null) return;
 
+			// Captured before re-pathing so the companion can restore the package's
+			// true original paths instead of the already-prefixed ones.
+			string[] pristinePaths = null;
+			if (interactive)
+				pristinePaths = GetItemDestinationPaths(assetsItems);
+
 			foreach (object item in assetsItems)
 			{
 				ChangeAssetItemPath(item, selectedFolderPath);
@@ -241,12 +269,13 @@ namespace CodeStage.PackageToFolder
 
 			if (interactive)
 			{
+				var knownWindowIds = GetPackageImportWindowIds();
 #if CS_P2F_NEW_ARGUMENT_2
 				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, assetOrigin);
 #else
 				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, allowReInstall);
 #endif
-
+				RegisterNewImportWindows(knownWindowIds, pristinePaths);
 			}
 			else
 			{
@@ -335,6 +364,91 @@ namespace CodeStage.PackageToFolder
 		}
 
 		///////////////////////////////////////////////////////////////
+		// Explicit-import bookkeeping (default folder suppression)
+		///////////////////////////////////////////////////////////////
+
+		// State is keyed by PackageImport window instance ID so that concurrent
+		// or aborted imports can't leak suppression onto unrelated windows.
+		private static readonly HashSet<int> autoApplySuppressedWindows = new HashSet<int>();
+		private static readonly Dictionary<int, string[]> pendingPristinePaths = new Dictionary<int, string[]>();
+
+		/// <summary>
+		/// Marks an import window as opened through an explicit ImportPackageToFolder call:
+		/// the companion must not auto-apply the default folder to it, and should use
+		/// <paramref name="pristinePaths"/> (captured before re-pathing) as the restore baseline.
+		/// </summary>
+		internal static void RegisterExplicitImportWindow(int windowInstanceId, string[] pristinePaths)
+		{
+			autoApplySuppressedWindows.Add(windowInstanceId);
+			if (pristinePaths != null)
+				pendingPristinePaths[windowInstanceId] = pristinePaths;
+		}
+
+		/// <summary>
+		/// Returns true exactly once per window registered via RegisterExplicitImportWindow.
+		/// </summary>
+		internal static bool ConsumeAutoApplySuppression(int windowInstanceId)
+		{
+			return autoApplySuppressedWindows.Remove(windowInstanceId);
+		}
+
+		/// <summary>
+		/// Hands out the pristine destination paths captured for the window, at most once.
+		/// </summary>
+		internal static bool TryTakePristinePaths(int windowInstanceId, out string[] pristinePaths)
+		{
+			if (pendingPristinePaths.TryGetValue(windowInstanceId, out pristinePaths))
+			{
+				pendingPristinePaths.Remove(windowInstanceId);
+				return true;
+			}
+
+			return false;
+		}
+
+		/// <summary>
+		/// Drops all pending explicit-import state; called when no PackageImport windows exist.
+		/// </summary>
+		internal static void ClearPendingImportState()
+		{
+			autoApplySuppressedWindows.Clear();
+			pendingPristinePaths.Clear();
+		}
+
+		internal static bool HasPendingImportState
+		{
+			get { return autoApplySuppressedWindows.Count > 0 || pendingPristinePaths.Count > 0; }
+		}
+
+		/// <summary>
+		/// Removes registrations for windows no longer alive, so a later window with a
+		/// recycled instance ID cannot pick up another window's suppression or paths.
+		/// </summary>
+		internal static void PruneStalePendingImportState(HashSet<int> liveWindowIds)
+		{
+			autoApplySuppressedWindows.RemoveWhere(id => !liveWindowIds.Contains(id));
+
+			if (pendingPristinePaths.Count == 0) return;
+
+			List<int> staleIds = null;
+			foreach (var pending in pendingPristinePaths)
+			{
+				if (liveWindowIds.Contains(pending.Key)) continue;
+
+				if (staleIds == null)
+					staleIds = new List<int>();
+				staleIds.Add(pending.Key);
+			}
+
+			if (staleIds == null) return;
+
+			foreach (var id in staleIds)
+			{
+				pendingPristinePaths.Remove(id);
+			}
+		}
+
+		///////////////////////////////////////////////////////////////
 		// PackageImport window helpers
 		///////////////////////////////////////////////////////////////
 
@@ -348,12 +462,65 @@ namespace CodeStage.PackageToFolder
 			var items = GetImportPackageItems(importWindow);
 			if (items == null) return null;
 
+			return GetItemDestinationPaths(items);
+		}
+
+		private static string[] GetItemDestinationPaths(object[] items)
+		{
 			var paths = new string[items.Length];
 			for (int i = 0; i < items.Length; i++)
 			{
 				paths[i] = (string)DestinationAssetPathFieldInfo.GetValue(items[i]);
 			}
 			return paths;
+		}
+
+		private static void RestoreItemPaths(object[] items, string[] originalPaths)
+		{
+			for (int i = 0; i < items.Length && i < originalPaths.Length; i++)
+			{
+				DestinationAssetPathFieldInfo.SetValue(items[i], originalPaths[i]);
+			}
+		}
+
+		private static HashSet<int> GetPackageImportWindowIds()
+		{
+			var ids = new HashSet<int>();
+			var windows = Resources.FindObjectsOfTypeAll(PackageImportType);
+			if (windows == null) return ids;
+
+			foreach (var window in windows)
+			{
+				ids.Add(window.GetInstanceID());
+			}
+			return ids;
+		}
+
+		private static void RegisterNewImportWindows(HashSet<int> knownWindowIds, string[] pristinePaths)
+		{
+			var windows = Resources.FindObjectsOfTypeAll(PackageImportType);
+			if (windows == null) return;
+
+			foreach (var window in windows)
+			{
+				var id = window.GetInstanceID();
+				if (!knownWindowIds.Contains(id))
+					RegisterExplicitImportWindow(id, pristinePaths);
+			}
+		}
+
+		/// <summary>
+		/// Resets all import item destinations to <paramref name="originalPaths"/> and rebuilds the window's tree.
+		/// </summary>
+		internal static void RestoreImportWindowPaths(EditorWindow importWindow, string[] originalPaths)
+		{
+			var items = GetImportPackageItems(importWindow);
+			if (items == null || originalPaths == null) return;
+
+			RestoreItemPaths(items, originalPaths);
+
+			TreeFieldInfo.SetValue(importWindow, null);
+			importWindow.Repaint();
 		}
 
 		internal static void SetImportWindowFolder(EditorWindow importWindow, string selectedFolderPath, string[] originalPaths)
@@ -363,12 +530,7 @@ namespace CodeStage.PackageToFolder
 
 			// Restore original paths first to avoid stacking folder prefixes
 			if (originalPaths != null)
-			{
-				for (int i = 0; i < items.Length && i < originalPaths.Length; i++)
-				{
-					DestinationAssetPathFieldInfo.SetValue(items[i], originalPaths[i]);
-				}
-			}
+				RestoreItemPaths(items, originalPaths);
 
 			// Apply new folder
 			foreach (var item in items)
@@ -405,6 +567,15 @@ namespace CodeStage.PackageToFolder
 		[SerializeField] private string[] originalPaths;
 		[SerializeField] private string selectedFolder;
 
+		/// <summary>
+		/// Forgets manual dismissals; called when no PackageImport windows exist, since a kept
+		/// mark could otherwise block the companion for an unrelated window with a recycled ID.
+		/// </summary>
+		internal static void ClearDismissedWindows()
+		{
+			dismissedImportWindows.Clear();
+		}
+
 		internal static void ShowForImportWindow(EditorWindow importWindow)
 		{
 			var id = importWindow.GetInstanceID();
@@ -421,10 +592,23 @@ namespace CodeStage.PackageToFolder
 			var companion = CreateInstance<Package2FolderCompanion>();
 			companion.importWindow = importWindow;
 			companion.titleContent = new GUIContent("Package2Folder");
-			companion.CacheOriginalPaths();
+
+			// For explicit ImportPackageToFolder imports the window's current paths already
+			// carry the chosen folder, so the restore baseline comes from the pristine
+			// paths captured before re-pathing.
+			string[] pristinePaths;
+			if (Package2Folder.TryTakePristinePaths(id, out pristinePaths))
+				companion.originalPaths = pristinePaths;
+			else
+				companion.CacheOriginalPaths();
+
 			companion.ShowUtility();
 			companion.PositionNearImportWindow();
 			activeCompanions[id] = companion;
+
+			var suppressAutoApply = Package2Folder.ConsumeAutoApplySuppression(id);
+			if (!suppressAutoApply && Package2FolderSettings.HasDefaultFolder)
+				companion.ApplyFolder(Package2FolderSettings.DefaultFolder);
 		}
 
 		private static void ClearStaleEntries()
@@ -484,28 +668,55 @@ namespace CodeStage.PackageToFolder
 			if (!string.IsNullOrEmpty(selectedFolder))
 			{
 				EditorGUILayout.LabelField("Target: " + selectedFolder, EditorStyles.miniLabel);
+
+				if (GUILayout.Button("Restore Original Paths"))
+				{
+					RestoreOriginalPaths();
+				}
 			}
+		}
+
+		/// <summary>
+		/// Redirects all import destinations to <paramref name="folderPath"/> (must be under Assets).
+		/// </summary>
+		internal void ApplyFolder(string folderPath)
+		{
+			if (importWindow == null) return;
+
+			selectedFolder = folderPath;
+			Package2Folder.SetImportWindowFolder(importWindow, selectedFolder, originalPaths);
+			UpdateHeight();
+			Repaint();
+		}
+
+		/// <summary>
+		/// Puts all import destinations back to the paths cached when the companion attached.
+		/// </summary>
+		private void RestoreOriginalPaths()
+		{
+			if (importWindow == null) return;
+
+			selectedFolder = null;
+			Package2Folder.RestoreImportWindowPaths(importWindow, originalPaths);
+			UpdateHeight();
+			Repaint();
+		}
+
+		private void UpdateHeight()
+		{
+			var height = string.IsNullOrEmpty(selectedFolder) ? 60 : 92;
+			position = new Rect(position.x, position.y, position.width, height);
 		}
 
 		private void SelectFolderAndModifyPaths()
 		{
-			var absolutePath = EditorUtility.OpenFolderPanel("Select target folder", "Assets", "");
+			var startFolder = Package2FolderSettings.HasDefaultFolder ? Package2FolderSettings.DefaultFolder : "Assets";
+			var absolutePath = EditorUtility.OpenFolderPanel("Select target folder", startFolder, "");
 			if (string.IsNullOrEmpty(absolutePath)) return;
 			if (importWindow == null) return;
 
-			absolutePath = absolutePath.Replace('\\', '/');
-			var dataPath = Application.dataPath.Replace('\\', '/');
-
 			string relativePath;
-			if (absolutePath == dataPath)
-			{
-				relativePath = "Assets";
-			}
-			else if (absolutePath.StartsWith(dataPath + "/"))
-			{
-				relativePath = "Assets" + absolutePath.Substring(dataPath.Length);
-			}
-			else
+			if (!Package2FolderSettings.TryGetProjectRelativeFolder(absolutePath, out relativePath))
 			{
 				EditorUtility.DisplayDialog("Invalid Folder",
 					"Please select a folder inside the Assets directory.", "OK");
@@ -514,6 +725,7 @@ namespace CodeStage.PackageToFolder
 
 			selectedFolder = relativePath;
 			Package2Folder.SetImportWindowFolder(importWindow, selectedFolder, originalPaths);
+			UpdateHeight();
 			Repaint();
 		}
 

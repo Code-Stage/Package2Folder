@@ -11,6 +11,11 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 
 💡 _Always remove previous plugin version before updating_
 
+## [Unreleased]
+
+### Added
+- Add default import folder setting (Edit > Preferences > Package2Folder): when set, the companion window redirects package import dialogs to that folder, a Restore Original Paths button undoes it for a single import, and folders picked explicitly via Import Package > Here... still win (closes #9)
+
 ## [1.3.0] - 2026-02-13
 
 ### Added
