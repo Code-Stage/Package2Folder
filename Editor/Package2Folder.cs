@@ -16,6 +16,11 @@ using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+#if UNITY_6000_4_OR_NEWER
+using ImportWindowId = UnityEngine.EntityId;
+#else
+using ImportWindowId = System.Int32;
+#endif
 
 namespace CodeStage.PackageToFolder
 {
@@ -398,8 +403,8 @@ namespace CodeStage.PackageToFolder
 
 	internal class Package2FolderCompanion : EditorWindow
 	{
-		private static readonly Dictionary<int, Package2FolderCompanion> activeCompanions = new Dictionary<int, Package2FolderCompanion>();
-		private static readonly HashSet<int> dismissedImportWindows = new HashSet<int>();
+		private static readonly Dictionary<ImportWindowId, Package2FolderCompanion> activeCompanions = new Dictionary<ImportWindowId, Package2FolderCompanion>();
+		private static readonly HashSet<ImportWindowId> dismissedImportWindows = new HashSet<ImportWindowId>();
 
 		[SerializeField] private EditorWindow importWindow;
 		[SerializeField] private string[] originalPaths;
@@ -407,7 +412,7 @@ namespace CodeStage.PackageToFolder
 
 		internal static void ShowForImportWindow(EditorWindow importWindow)
 		{
-			var id = importWindow.GetInstanceID();
+			var id = GetImportWindowId(importWindow);
 
 			if (dismissedImportWindows.Contains(id))
 				return;
@@ -429,7 +434,7 @@ namespace CodeStage.PackageToFolder
 
 		private static void ClearStaleEntries()
 		{
-			var staleKeys = new List<int>();
+			var staleKeys = new List<ImportWindowId>();
 			foreach (var kvp in activeCompanions)
 			{
 				if (kvp.Value == null || kvp.Value.importWindow == null)
@@ -445,6 +450,15 @@ namespace CodeStage.PackageToFolder
 		private void CacheOriginalPaths()
 		{
 			originalPaths = Package2Folder.GetImportItemPaths(importWindow);
+		}
+
+		private static ImportWindowId GetImportWindowId(EditorWindow window)
+		{
+#if UNITY_6000_4_OR_NEWER
+			return window.GetEntityId();
+#else
+			return window.GetInstanceID();
+#endif
 		}
 
 		private void PositionNearImportWindow()
@@ -463,7 +477,7 @@ namespace CodeStage.PackageToFolder
 		private void OnEnable()
 		{
 			if (importWindow != null)
-				activeCompanions[importWindow.GetInstanceID()] = this;
+				activeCompanions[GetImportWindowId(importWindow)] = this;
 		}
 
 		private void Update()
@@ -521,7 +535,7 @@ namespace CodeStage.PackageToFolder
 		{
 			if (importWindow != null)
 			{
-				var id = importWindow.GetInstanceID();
+				var id = GetImportWindowId(importWindow);
 				activeCompanions.Remove(id);
 				// Import window still alive means user dismissed companion manually
 				dismissedImportWindows.Add(id);

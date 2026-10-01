@@ -14,6 +14,7 @@ namespace CodeStage.PackageToFolder.Tests
 		private const string TestAssetContent = "This is a test asset for Package2Folder testing";
 		private const string TestFolderName = "Package2FolderTest";
 		private const string ImportTargetFolder = "ImportedAssets";
+		private const double ImportTimeoutSeconds = 60;
 		
 		private string testAssetPath;
 		private string testFolderPath;
@@ -95,8 +96,15 @@ namespace CodeStage.PackageToFolder.Tests
 			Package2Folder.ImportPackageToFolder(tempPackagePath, importTargetPath, false);
 			
 			AssetDatabase.Refresh();
-			yield return null;
-			yield return null;
+			// Unity can complete a silent import after the API call returns.
+			var expectedPath = Path.Combine(importTargetPath, TestFolderName, TestAssetName);
+			var deadline = EditorApplication.timeSinceStartup + ImportTimeoutSeconds;
+			while ((!File.Exists(expectedPath) || !File.Exists(expectedPath + ".meta") ||
+				AssetDatabase.LoadAssetAtPath<TextAsset>(expectedPath) == null) &&
+				EditorApplication.timeSinceStartup < deadline)
+			{
+				yield return null;
+			}
 		}
 
 		private IEnumerator ValidateImport()
