@@ -41,12 +41,14 @@ namespace CodeStage.PackageToFolder
 #endif
 
 		private static Type packageUtilityType;
+		private static bool nativeImportPending;
 		private static Type PackageUtilityType
 		{
 			get
 			{
 				if (packageUtilityType == null)
-					packageUtilityType = typeof(MenuItem).Assembly.GetType("UnityEditor.PackageUtility");
+					packageUtilityType = typeof(MenuItem).Assembly.GetType("UnityEditor.AssetPackage.Utility") ??
+						typeof(MenuItem).Assembly.GetType("UnityEditor.PackageUtility");
 				return packageUtilityType;
 			}
 		}
@@ -79,7 +81,8 @@ namespace CodeStage.PackageToFolder
 			{
 				if (destinationAssetPathFieldInfo == null)
 				{
-					var importPackageItem = typeof(MenuItem).Assembly.GetType("UnityEditor.ImportPackageItem");
+					var importPackageItem = typeof(MenuItem).Assembly.GetType("UnityEditor.AssetPackage.ImportPackageItem") ??
+						typeof(MenuItem).Assembly.GetType("UnityEditor.ImportPackageItem");
 					destinationAssetPathFieldInfo = importPackageItem.GetField("destinationAssetPath");
 				}
 				return destinationAssetPathFieldInfo;
@@ -174,6 +177,7 @@ namespace CodeStage.PackageToFolder
 
 		private static void WatchForPackageImportWindows()
 		{
+			if (nativeImportPending) return;
 			if (EditorApplication.timeSinceStartup < nextWatchTime) return;
 			nextWatchTime = EditorApplication.timeSinceStartup + 0.25;
 
@@ -217,6 +221,10 @@ namespace CodeStage.PackageToFolder
 		/// <summary>
 		/// Allows to import package to the specified folder either via standard import window or silently.
 		/// </summary>
+		/// <remarks>
+		/// On Unity 6.5+, native preparation briefly opens an import window even for non-interactive imports.
+		/// These imports require a graphics device and complete asynchronously after this method returns.
+		/// </remarks>
 		/// <param name="packagePath">Native path to the package.</param>
 		/// <param name="selectedFolderPath">Path to the target folder where you wish to import package into.
 		/// Relative to the project folder (should start with 'Assets')</param>
@@ -224,6 +232,16 @@ namespace CodeStage.PackageToFolder
 		/// <param name="assetOrigin">An optional UnityEditor.AssetOrigin object which Unity from version 2023+ uses internally to store the source of the imported asset inside the meta file.</param>
 		public static void ImportPackageToFolder(string packagePath, string selectedFolderPath, bool interactive, object assetOrigin = null)
 		{
+			selectedFolderPath = ValidateTargetFolder(selectedFolderPath);
+			if (nativeImportPending || Resources.FindObjectsOfTypeAll(PackageImportType).Length != 0)
+				throw new InvalidOperationException("Finish or cancel the current package import before starting another.");
+
+			if (PackageUtilityType.GetMethod("ExtractAndPrepareAssetList") == null)
+			{
+				ImportUsingNativePreparation(packagePath, selectedFolderPath, interactive, assetOrigin);
+				return;
+			}
+
 			string packageIconPath;
 #if CS_P2F_NEW_ARGUMENT_2
 			string packageManagerDependenciesPath;
@@ -262,8 +280,7 @@ namespace CodeStage.PackageToFolder
 
 		public static void ChangeAssetItemPath(object assetItem, string selectedFolderPath)
 		{
-			if (string.IsNullOrEmpty(selectedFolderPath) || !selectedFolderPath.StartsWith("Assets"))
-				throw new ArgumentException("selectedFolderPath must start with 'Assets'", "selectedFolderPath");
+			selectedFolderPath = ValidateTargetFolder(selectedFolderPath);
 
 			string destinationPath = (string)DestinationAssetPathFieldInfo.GetValue(assetItem);
 			if (destinationPath.StartsWith("Packages/")) return;
@@ -285,6 +302,22 @@ namespace CodeStage.PackageToFolder
 #if CS_P2F_NEW_ARGUMENT_2
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, object assetOrigin = null)
 		{
+			if (ShowImportPackageMethodInfo.GetParameters()[1].ParameterType == typeof(IntPtr))
+			{
+				var wizard = GetImportWizard();
+				var origin = assetOrigin ?? Activator.CreateInstance(typeof(MenuItem).Assembly.GetType("UnityEditor.AssetOrigin"));
+				var startImport = wizard.GetType().GetMethod("StartImport");
+				var arguments = new List<object> { path, array, packageIconPath, origin, GetExtractedPackagePath(array) };
+				if (startImport.GetParameters().Length == 6)
+				{
+					var preparedPath = (string)wizard.GetType().GetField("m_PackagePath", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(wizard);
+					if (string.IsNullOrEmpty(preparedPath) || Path.GetFullPath(preparedPath) != Path.GetFullPath(path))
+						throw new InvalidOperationException("Prepare this package with Unity before opening its import window.");
+					arguments.Add(wizard.GetType().GetProperty("assetPackageInfo").GetValue(wizard));
+				}
+				startImport.Invoke(wizard, arguments.ToArray());
+				return;
+			}
 #if UNITY_2023_1_OR_NEWER
 			int productId = 0;
 			string packageName = null;
@@ -325,6 +358,15 @@ namespace CodeStage.PackageToFolder
 
 		public static void ImportPackageSilently(string packageName, object[] assetsItems, object assetOrigin = null)
 		{
+			if (ImportPackageAssetsMethodInfo.GetParameters().Length == 4)
+			{
+				var extractedPath = GetExtractedPackagePath(assetsItems);
+				if (assetOrigin != null)
+					ImportPackageAssetsWithOriginMethodInfo.Invoke(null, new[] { assetOrigin, assetsItems, extractedPath, false });
+				else
+					ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems, extractedPath, false });
+				return;
+			}
 #if CS_P2F_NEW_NON_INTERACTIVE_LOGIC
 			if (assetOrigin != null)
 			{
@@ -390,6 +432,100 @@ namespace CodeStage.PackageToFolder
 		// Utility methods
 		///////////////////////////////////////////////////////////////
 
+		private static string ValidateTargetFolder(string folder)
+		{
+			var normalized = folder?.Replace('\\', '/').TrimEnd('/');
+			if (string.IsNullOrEmpty(normalized) ||
+				(normalized != "Assets" && !normalized.StartsWith("Assets/", StringComparison.Ordinal)) ||
+				Array.IndexOf(normalized.Split('/'), "..") >= 0)
+				throw new ArgumentException("The target folder must be inside Assets.", nameof(folder));
+			return normalized;
+		}
+
+		private static object GetImportWizard()
+		{
+			var type = typeof(MenuItem).Assembly.GetType("UnityEditor.PackageImportWizard");
+			return type.GetProperty("instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy).GetValue(null);
+		}
+
+		private static string GetExtractedPackagePath(object[] items)
+		{
+			if (items == null || items.Length == 0)
+				throw new ArgumentException("At least one prepared import item is required.", nameof(items));
+			var source = (string)items[0].GetType().GetField("sourceFolder").GetValue(items[0]);
+			return Path.GetDirectoryName(source);
+		}
+
+		private static void ImportUsingNativePreparation(string packagePath, string folder, bool interactive, object origin)
+		{
+			if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+				throw new NotSupportedException("Native package preparation requires a graphics device. Run Unity without -nographics.");
+			packagePath = Path.GetFullPath(packagePath);
+			if (!File.Exists(packagePath)) throw new FileNotFoundException("Package not found.", packagePath);
+			nativeImportPending = true;
+			EditorApplication.update += RedirectPreparedImport;
+			AssetDatabase.importPackageFailed += ImportFailed;
+			AssetDatabase.importPackageCancelled += ImportCancelled;
+			AssetDatabase.importPackageCompleted += ImportCancelled;
+			try { AssetDatabase.ImportPackage(packagePath, true); }
+			catch { StopWaiting(); throw; }
+
+			void StopWaiting()
+			{
+				nativeImportPending = false;
+				EditorApplication.update -= RedirectPreparedImport;
+				AssetDatabase.importPackageFailed -= ImportFailed;
+				AssetDatabase.importPackageCancelled -= ImportCancelled;
+				AssetDatabase.importPackageCompleted -= ImportCancelled;
+			}
+
+			void ImportFailed(string name, string error) { ImportCancelled(name); }
+			void ImportCancelled(string name)
+			{
+				if (name == Path.GetFileNameWithoutExtension(packagePath)) StopWaiting();
+			}
+
+			void RedirectPreparedImport()
+			{
+				EditorWindow ownedWindow = null;
+				try
+				{
+					var wizard = GetImportWizard();
+					var type = wizard.GetType();
+					const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+					var path = (string)type.GetField("m_PackagePath", fields).GetValue(wizard);
+					var window = type.GetField("m_ImportWindow", fields).GetValue(wizard) as EditorWindow;
+					if (window == null || string.IsNullOrEmpty(path) || Path.GetFullPath(path) != packagePath)
+						return;
+					ownedWindow = window;
+
+					var items = (object[])type.GetField("m_InitialImportItems", fields).GetValue(wizard);
+					if (items == null) return;
+					StopWaiting();
+					if (interactive) Package2FolderCompanion.ShowForImportWindow(window, folder);
+					foreach (var item in items) ChangeAssetItemPath(item, folder);
+					if (interactive)
+					{
+						if (origin != null) type.GetField("m_AssetOrigin", fields).SetValue(wizard, origin);
+						TreeFieldInfo.SetValue(window, null);
+						window.Repaint();
+					}
+					else
+					{
+						ImportPackageSilently(Path.GetFileNameWithoutExtension(packagePath), items, origin);
+						window.Close();
+						type.GetMethod("ClearImportData", fields).Invoke(wizard, null);
+					}
+				}
+				catch (Exception exception)
+				{
+					StopWaiting();
+					if (ownedWindow != null) ownedWindow.Close();
+					Debug.LogException(exception);
+				}
+			}
+		}
+
 		private static string GetSelectedFolderPath()
 		{
 			if (Selection.assetGUIDs == null || Selection.assetGUIDs.Length == 0)
@@ -410,7 +546,7 @@ namespace CodeStage.PackageToFolder
 		[SerializeField] private string[] originalPaths;
 		[SerializeField] private string selectedFolder;
 
-		internal static void ShowForImportWindow(EditorWindow importWindow)
+		internal static void ShowForImportWindow(EditorWindow importWindow, string selectedFolder = null)
 		{
 			var id = GetImportWindowId(importWindow);
 
@@ -425,6 +561,7 @@ namespace CodeStage.PackageToFolder
 
 			var companion = CreateInstance<Package2FolderCompanion>();
 			companion.importWindow = importWindow;
+			companion.selectedFolder = selectedFolder;
 			companion.titleContent = new GUIContent("Package2Folder");
 			companion.CacheOriginalPaths();
 			companion.ShowUtility();
