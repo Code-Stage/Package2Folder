@@ -50,8 +50,6 @@ namespace CodeStage.PackageToFolder.Tests
 			yield return DeleteOriginalAsset();
 			yield return ImportPackageToTargetFolder();
 			yield return ValidateImport();
-			
-			CleanupTempPackage();
 		}
 
 		[UnityTest]
@@ -113,10 +111,20 @@ namespace CodeStage.PackageToFolder.Tests
 			Assert.AreSame(importWindow, Resources.FindObjectsOfTypeAll(windowType)[0]);
 			Assert.IsTrue(System.Array.Exists(items, item =>
 				(string)item.GetType().GetField("destinationAssetPath").GetValue(item) == expectedPath));
+			var companionType = typeof(Package2Folder).Assembly.GetType("CodeStage.PackageToFolder.Package2FolderCompanion");
+			var showCompanion = companionType.GetMethod("ShowForImportWindow", BindingFlags.Static | BindingFlags.NonPublic);
+			showCompanion.Invoke(null, new object[] { importWindow, null });
+			Assert.AreEqual(1, Resources.FindObjectsOfTypeAll(companionType).Length, "Duplicate companion window");
+			((EditorWindow)Resources.FindObjectsOfTypeAll(companionType)[0]).Close();
+			showCompanion.Invoke(null, new object[] { importWindow, null });
+			Assert.IsEmpty(Resources.FindObjectsOfTypeAll(companionType), "Dismissed companion reopened");
 			importWindow.Close();
+			yield return null;
 			Package2Folder.ShowImportPackageWindow(tempPackagePath, items, string.Empty);
 			yield return null;
 			Assert.AreEqual(1, Resources.FindObjectsOfTypeAll(windowType).Length);
+			showCompanion.Invoke(null, new object[] { Resources.FindObjectsOfTypeAll(windowType)[0], null });
+			Assert.AreEqual(1, Resources.FindObjectsOfTypeAll(companionType).Length, "New import has no companion");
 			Package2Folder.ImportPackageSilently(Path.GetFileNameWithoutExtension(tempPackagePath), items);
 			deadline = EditorApplication.timeSinceStartup + ImportTimeoutSeconds;
 			while (!File.Exists(expectedPath) && EditorApplication.timeSinceStartup < deadline)

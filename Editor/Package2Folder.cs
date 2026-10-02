@@ -1,26 +1,9 @@
-// new argument was added in 19.1.4
-
-#if UNITY_2019_3_OR_NEWER
-#define CS_P2F_NEW_ARGUMENT_2
-#elif (UNITY_2019_1_OR_NEWER && !UNITY_2019_1_0 && !UNITY_2019_1_1 && !UNITY_2019_1_2 && !UNITY_2019_1_3) || (UNITY_2018_4_OR_NEWER && !UNITY_2018_4_0 && !UNITY_2018_4_1 && !UNITY_2018_4_2)
-#define CS_P2F_NEW_ARGUMENT
-#endif
-
-#if UNITY_2019_3_OR_NEWER
-#define CS_P2F_NEW_NON_INTERACTIVE_LOGIC
-#endif
-
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
-#if UNITY_6000_4_OR_NEWER
-using ImportWindowId = UnityEngine.EntityId;
-#else
-using ImportWindowId = System.Int32;
-#endif
 
 namespace CodeStage.PackageToFolder
 {
@@ -32,13 +15,7 @@ namespace CodeStage.PackageToFolder
 
 		#region reflection stuff
 
-#if CS_P2F_NEW_ARGUMENT_2
 		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out string packageManagerDependenciesPath);
-#elif CS_P2F_NEW_ARGUMENT
-		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall, out string packageManagerDependenciesPath);
-#else
-		private delegate object[] ExtractAndPrepareAssetListDelegate(string packagePath, out string packageIconPath, out bool allowReInstall);
-#endif
 
 		private static Type packageUtilityType;
 		private static bool nativeImportPending;
@@ -243,17 +220,8 @@ namespace CodeStage.PackageToFolder
 			}
 
 			string packageIconPath;
-#if CS_P2F_NEW_ARGUMENT_2
 			string packageManagerDependenciesPath;
 			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out packageManagerDependenciesPath);
-#elif CS_P2F_NEW_ARGUMENT
-			bool allowReInstall;
-			string packageManagerDependenciesPath;
-			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out allowReInstall, out packageManagerDependenciesPath);
-#else
-			bool allowReInstall;
-			var assetsItems = ExtractAndPrepareAssetList(packagePath, out packageIconPath, out allowReInstall);
-#endif
 
 			if (assetsItems == null) return;
 
@@ -264,12 +232,7 @@ namespace CodeStage.PackageToFolder
 
 			if (interactive)
 			{
-#if CS_P2F_NEW_ARGUMENT_2
 				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, assetOrigin);
-#else
-				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, allowReInstall);
-#endif
-
 			}
 			else
 			{
@@ -299,7 +262,6 @@ namespace CodeStage.PackageToFolder
 			DestinationAssetPathFieldInfo.SetValue(assetItem, destinationPath);
 		}
 
-#if CS_P2F_NEW_ARGUMENT_2
 		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, object assetOrigin = null)
 		{
 			if (ShowImportPackageMethodInfo.GetParameters()[1].ParameterType == typeof(IntPtr))
@@ -349,36 +311,15 @@ namespace CodeStage.PackageToFolder
 			});
 #endif
 		}
-#else
-		public static void ShowImportPackageWindow(string path, object[] array, string packageIconPath, bool allowReInstall)
-		{
-			ShowImportPackageMethodInfo.Invoke(null, new object[] { path, array, packageIconPath, allowReInstall });
-		}
-#endif
 
 		public static void ImportPackageSilently(string packageName, object[] assetsItems, object assetOrigin = null)
 		{
-			if (ImportPackageAssetsMethodInfo.GetParameters().Length == 4)
-			{
-				var extractedPath = GetExtractedPackagePath(assetsItems);
-				if (assetOrigin != null)
-					ImportPackageAssetsWithOriginMethodInfo.Invoke(null, new[] { assetOrigin, assetsItems, extractedPath, false });
-				else
-					ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems, extractedPath, false });
-				return;
-			}
-#if CS_P2F_NEW_NON_INTERACTIVE_LOGIC
-			if (assetOrigin != null)
-			{
-				ImportPackageAssetsWithOriginMethodInfo.Invoke(null, new[] {assetOrigin, assetsItems});
-			}
-			else
-			{
-				ImportPackageAssetsMethodInfo.Invoke(null, new object[] {packageName, assetsItems});
-			}
-#else
-			ImportPackageAssetsMethodInfo.Invoke(null, new object[] { packageName, assetsItems, false });
-#endif
+			var method = assetOrigin != null ? ImportPackageAssetsWithOriginMethodInfo : ImportPackageAssetsMethodInfo;
+			var firstArgument = assetOrigin ?? (object)packageName;
+			var arguments = ImportPackageAssetsMethodInfo.GetParameters().Length == 4
+				? new object[] { firstArgument, assetsItems, GetExtractedPackagePath(assetsItems), false }
+				: new[] { firstArgument, assetsItems };
+			method.Invoke(null, arguments);
 		}
 
 		///////////////////////////////////////////////////////////////
@@ -539,8 +480,7 @@ namespace CodeStage.PackageToFolder
 
 	internal class Package2FolderCompanion : EditorWindow
 	{
-		private static readonly Dictionary<ImportWindowId, Package2FolderCompanion> activeCompanions = new Dictionary<ImportWindowId, Package2FolderCompanion>();
-		private static readonly HashSet<ImportWindowId> dismissedImportWindows = new HashSet<ImportWindowId>();
+		private static readonly HashSet<EditorWindow> shownImportWindows = new HashSet<EditorWindow>();
 
 		[SerializeField] private EditorWindow importWindow;
 		[SerializeField] private string[] originalPaths;
@@ -548,15 +488,8 @@ namespace CodeStage.PackageToFolder
 
 		internal static void ShowForImportWindow(EditorWindow importWindow, string selectedFolder = null)
 		{
-			var id = GetImportWindowId(importWindow);
-
-			if (dismissedImportWindows.Contains(id))
-				return;
-
-			ClearStaleEntries();
-
-			Package2FolderCompanion existing;
-			if (activeCompanions.TryGetValue(id, out existing) && existing != null)
+			shownImportWindows.RemoveWhere(window => window == null);
+			if (shownImportWindows.Contains(importWindow))
 				return;
 
 			var companion = CreateInstance<Package2FolderCompanion>();
@@ -566,36 +499,12 @@ namespace CodeStage.PackageToFolder
 			companion.CacheOriginalPaths();
 			companion.ShowUtility();
 			companion.PositionNearImportWindow();
-			activeCompanions[id] = companion;
-		}
-
-		private static void ClearStaleEntries()
-		{
-			var staleKeys = new List<ImportWindowId>();
-			foreach (var kvp in activeCompanions)
-			{
-				if (kvp.Value == null || kvp.Value.importWindow == null)
-					staleKeys.Add(kvp.Key);
-			}
-			foreach (var key in staleKeys)
-			{
-				activeCompanions.Remove(key);
-				dismissedImportWindows.Remove(key);
-			}
+			shownImportWindows.Add(importWindow);
 		}
 
 		private void CacheOriginalPaths()
 		{
 			originalPaths = Package2Folder.GetImportItemPaths(importWindow);
-		}
-
-		private static ImportWindowId GetImportWindowId(EditorWindow window)
-		{
-#if UNITY_6000_4_OR_NEWER
-			return window.GetEntityId();
-#else
-			return window.GetInstanceID();
-#endif
 		}
 
 		private void PositionNearImportWindow()
@@ -614,7 +523,7 @@ namespace CodeStage.PackageToFolder
 		private void OnEnable()
 		{
 			if (importWindow != null)
-				activeCompanions[GetImportWindowId(importWindow)] = this;
+				shownImportWindows.Add(importWindow);
 		}
 
 		private void Update()
@@ -666,17 +575,6 @@ namespace CodeStage.PackageToFolder
 			selectedFolder = relativePath;
 			Package2Folder.SetImportWindowFolder(importWindow, selectedFolder, originalPaths);
 			Repaint();
-		}
-
-		private void OnDestroy()
-		{
-			if (importWindow != null)
-			{
-				var id = GetImportWindowId(importWindow);
-				activeCompanions.Remove(id);
-				// Import window still alive means user dismissed companion manually
-				dismissedImportWindows.Add(id);
-			}
 		}
 	}
 }
