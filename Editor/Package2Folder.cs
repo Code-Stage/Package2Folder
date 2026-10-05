@@ -173,6 +173,8 @@ namespace CodeStage.PackageToFolder
 		// Unity Editor menus integration
 		///////////////////////////////////////////////////////////////
 
+		private static Func<string> selectPackage = () => EditorUtility.OpenFilePanel("Import package ...", "", "unitypackage");
+
 		[MenuItem("Assets/Import Package/Here...", true)]
 		private static bool IsImportToFolderCheck()
 		{
@@ -183,11 +185,11 @@ namespace CodeStage.PackageToFolder
 		[MenuItem("Assets/Import Package/Here...", false)]
 		private static void Package2FolderCommand()
 		{
-			var packagePath = EditorUtility.OpenFilePanel("Import package ...", "",  "unitypackage");
+			var selectedFolderPath = GetSelectedFolderPath();
+			var packagePath = selectPackage();
 			if (string.IsNullOrEmpty(packagePath)) return;
 			if (!File.Exists(packagePath)) return;
 
-			var selectedFolderPath = GetSelectedFolderPath();
 			ImportPackageToFolder(packagePath, selectedFolderPath, true);
 		}
 
@@ -225,14 +227,15 @@ namespace CodeStage.PackageToFolder
 
 			if (assetsItems == null) return;
 
-			foreach (object item in assetsItems)
-			{
-				ChangeAssetItemPath(item, selectedFolderPath);
-			}
+			var originalPaths = interactive
+				? Array.ConvertAll(assetsItems, item => (string)DestinationAssetPathFieldInfo.GetValue(item)) : null;
+			foreach (var item in assetsItems) ChangeAssetItemPath(item, selectedFolderPath);
 
 			if (interactive)
 			{
 				ShowImportPackageWindow(packagePath, assetsItems, packageIconPath, assetOrigin);
+				var window = (EditorWindow)Resources.FindObjectsOfTypeAll(PackageImportType)[0];
+				Package2FolderCompanion.ShowForImportWindow(window, selectedFolderPath, originalPaths);
 			}
 			else
 			{
@@ -474,7 +477,8 @@ namespace CodeStage.PackageToFolder
 
 			var assetGuid = Selection.assetGUIDs[0];
 			var path = AssetDatabase.GUIDToAssetPath(assetGuid);
-			return !Directory.Exists(path) ? null : path;
+			return AssetDatabase.IsValidFolder(path) &&
+				(path == "Assets" || path.StartsWith("Assets/", StringComparison.Ordinal)) ? path : null;
 		}
 	}
 
@@ -486,7 +490,7 @@ namespace CodeStage.PackageToFolder
 		[SerializeField] private string[] originalPaths;
 		[SerializeField] private string selectedFolder;
 
-		internal static void ShowForImportWindow(EditorWindow importWindow, string selectedFolder = null)
+		internal static void ShowForImportWindow(EditorWindow importWindow, string selectedFolder = null, string[] originalPaths = null)
 		{
 			shownImportWindows.RemoveWhere(window => window == null);
 			if (shownImportWindows.Contains(importWindow))
@@ -496,15 +500,10 @@ namespace CodeStage.PackageToFolder
 			companion.importWindow = importWindow;
 			companion.selectedFolder = selectedFolder;
 			companion.titleContent = new GUIContent("Package2Folder");
-			companion.CacheOriginalPaths();
+			companion.originalPaths = originalPaths ?? Package2Folder.GetImportItemPaths(importWindow);
 			companion.ShowUtility();
 			companion.PositionNearImportWindow();
 			shownImportWindows.Add(importWindow);
-		}
-
-		private void CacheOriginalPaths()
-		{
-			originalPaths = Package2Folder.GetImportItemPaths(importWindow);
 		}
 
 		private void PositionNearImportWindow()
