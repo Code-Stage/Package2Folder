@@ -11,6 +11,17 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 
 💡 _Always remove previous plugin version before updating_
 
+## [1.3.1] - 2026-10-06
+
+### Fixed
+- Restore folder imports on Unity 6.5 and 6.6, with compatibility checks on Unity 6.7 beta.
+- Keep companion windows from reopening after dismissal and clear their tracking when the import window closes.
+- Reject target folders outside Assets and prevent a second import from replacing an open import dialog.
+
+### Changed
+- Require Unity 2022.3 or newer.
+- On Unity 6.5 and newer, non-interactive imports use native package preparation and require a graphics device. Run batchmode without `-nographics`.
+
 ## [1.3.0] - 2026-02-13
 
 ### Added
@@ -77,4 +88,4 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 ## [1.0.0]
 
 ### Added
-- Initial release 
+- Initial release
