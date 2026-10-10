@@ -1,0 +1,8 @@
+{
+  "stable-branch": "master",
+  "dev-branch": "develop",
+  "release-prefix": "release/",
+  "release-enabled": true,
+  "changelog": "CHANGELOG.md",
+  "version-file": "package.json"
+}

@@ -1,0 +1,65 @@
+name: Product release
+
+on:
+  push:
+    branches: [main, master, v1]
+  workflow_dispatch:
+  pull_request:
+    branches: [main, master, v1, dev, develop, v1-dev]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-routing:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          submodules: false
+      - name: Check branch routing
+        run: |
+          git fetch origin "$HEAD_SHA"
+          if [ -f .github/scripts/product_release.py ]; then
+            python3 .github/scripts/product_release.py --check-pr
+          else
+            python3 - <<'PY'
+          import json, os, subprocess
+          event = json.load(open(os.environ['GITHUB_EVENT_PATH']))['pull_request']
+          head, base = event['head'], event['base']
+          config = json.loads(subprocess.check_output(['git', 'show', head['sha'] + ':.github/product-release.json']))
+          same_repo = head['repo']['full_name'] == base['repo']['full_name']
+          known_pair = (config['stable-branch'], config['dev-branch']) in {('main', 'dev'), ('master', 'dev'), ('master', 'develop'), ('v1', 'v1-dev')}
+          enrollment = head['ref'] == 'feature/release-workflow' or (head['ref'] == 'feature/release-workflow-v1' and config['stable-branch'] == 'v1')
+          first_install = enrollment and base['ref'] == config['stable-branch']
+          first_sync = head['ref'] == config['stable-branch'] and base['ref'] == config['dev-branch']
+          if not same_repo or not known_pair or not (first_install or first_sync):
+              raise SystemExit('Base lacks release automation; only initial enrollment or stable-to-development sync is allowed')
+          print('Initial release automation enrollment or development sync')
+          PY
+          fi
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+  release:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: product-release-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: false
+      - run: python3 .github/scripts/product_release.py
+        env:
+          GH_TOKEN: ${{ github.token }}
