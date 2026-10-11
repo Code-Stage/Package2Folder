@@ -109,15 +109,16 @@ def plan_release(repo, config, sha, event, api):
             break
         parent = git(repo, 'rev-parse', '--verify', f'{candidate}^1', optional=True)
         previous = top_version(repo, parent, config) if parent else None
-        # Installing version metadata into an old product must not publish a release.
-        if previous is None:
-            return None
-        if previous == version:
+        # A first release needs provenance; never reuse an older version tag.
+        if previous in (None, version) and existing and existing != candidate:
             continue
         if not provenance(repo, candidate, config, version, api):
+            if previous == version:
+                continue
             return None
         candidate_entry = entry(repo, candidate, config)
-        if tuple(map(int, version.split('.'))) <= tuple(map(int, previous.split('.'))):
+        if (previous not in (None, version)
+                and tuple(map(int, version.split('.'))) <= tuple(map(int, previous.split('.')))):
             raise ValueError(f'Release {version} must be newer than stable version {previous}')
         tags = git(repo, 'tag', '--merged', candidate).splitlines()
         versions = [tuple(map(int, tag.split('.'))) for tag in tags
