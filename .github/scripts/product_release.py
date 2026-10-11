@@ -29,7 +29,8 @@ def top_version(repo, sha, config):
     text = git(repo, 'show', f"{sha}:{config['changelog']}", optional=True)
     if text is None:
         return None
-    heading = re.search(r'^## .*$', text, re.MULTILINE)
+    heading = re.search(r'^## \[?(?:[0-9]+\.[0-9]+\.[0-9]+|Unreleased)(?:\]|\s|$).*$',
+                        text, re.MULTILINE | re.IGNORECASE)
     if heading:
         found = re.match(rf'^## \[?({VERSION})\]?(?:\s|$)', heading.group(0))
     else:
@@ -41,7 +42,8 @@ def entry(repo, sha, config):
     text = git(repo, 'show', f"{sha}:{config['changelog']}", optional=True)
     if text is None:
         return None
-    heading = re.search(r'^## .*$', text, re.MULTILINE)
+    heading = re.search(r'^## \[?(?:[0-9]+\.[0-9]+\.[0-9]+|Unreleased)(?:\]|\s|$).*$',
+                        text, re.MULTILINE | re.IGNORECASE)
     match = re.fullmatch(rf'## \[?({VERSION})\]? - (\d{{4}}-\d{{2}}-\d{{2}})',
                          heading.group(0)) if heading else None
     if not match:
