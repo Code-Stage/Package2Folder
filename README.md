@@ -1,6 +1,6 @@
 # Package2Folder
 
-[![Unity Version](https://img.shields.io/badge/Unity-2020.3%2B-blue?logo=unity)](https://unity.com/)
+[![Unity Version](https://img.shields.io/badge/Unity-2022.3%2B-blue?logo=unity)](https://unity.com/)
 [![License](https://img.shields.io/badge/License-MPL--2.0-orange)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/Code-Stage/Package2Folder)](https://github.com/Code-Stage/Package2Folder/releases)
 [![Discord](https://img.shields.io/discord/847940058476052491?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/Ppsb89naWf)
@@ -13,7 +13,7 @@ This Unity Editor extension allows you to import custom package into the selecte
 It also has public API to let you run package import to folder from your scripts:
 
 ```csharp
-CodeStage.PackageToFolder.Package2Folder.ImportPackageToFolder();
+CodeStage.PackageToFolder.Package2Folder.ImportPackageToFolder(packagePath, targetFolderPath, true);
 ```
 
 See detailed API description in code.
@@ -32,6 +32,10 @@ See detailed API description in code.
 
 Download the latest `.unitypackage` file from the [Releases](https://github.com/Code-Stage/Package2Folder/releases) section and import it into your project.
 
+### Option 3: Unity Asset Store
+
+Import from the [Unity Asset Store](https://assetstore.unity.com/packages/slug/64829).
+
 ## How to use
 
 ### Option A: Via right-click menu (select folder first)
@@ -39,9 +43,12 @@ Download the latest `.unitypackage` file from the [Releases](https://github.com/
 1. In the Project window, select the folder where you want to import a package
 2. Use the menu item: `Assets > Import Package > Here...`
 3. Select the `.unitypackage` file you want to import
-4. The package will be imported into the selected folder instead of the project root
+4. In Unity's import dialog, select the assets you need and click **Import**
+5. The package will be imported into the selected folder instead of the project root
 
 ### Option B: Via companion window (any import method)
+
+<img width="200" alt="image" src="https://github.com/user-attachments/assets/eb927279-1df0-43c7-9b28-7046d8a398be" />
 
 Whenever Unity's import dialog opens — whether from **Package Manager > My Assets**, drag-and-drop, or the Assets menu — a small **Package2Folder** utility window automatically appears next to it:
 
@@ -64,6 +71,8 @@ Package2Folder.ImportPackageToFolder(packagePath, targetFolderPath, true);
 // Import package silently
 Package2Folder.ImportPackageToFolder(packagePath, targetFolderPath, false);
 ```
+
+Imports can finish after this method returns. On Unity 6.5 and newer, native package preparation briefly opens an import window even for non-interactive imports and requires a graphics device. Run batchmode without `-nographics` on those versions.
 
 ## Support
 
