@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: product-pipeline-${{ github.repository }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   branch-routing:
     if: github.event_name == 'pull_request'
@@ -54,12 +58,122 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      version: ${{ steps.publish.outputs.version }}
+      sha: ${{ steps.publish.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           submodules: false
-      - run: python3 .github/scripts/product_release.py
+      - id: publish
+        run: python3 .github/scripts/product_release.py
         env:
           GH_TOKEN: ${{ github.token }}
+
+  documentation:
+    needs: release
+    if: needs.release.outputs.version != '' && vars.AUTOMATIC_DOCS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    concurrency:
+      group: product-docs-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.WEBSITE_RELEASE_TOKEN }}
+      WEBSITE: ${{ github.workspace }}/.codex/work/website
+      PRODUCT_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ needs.release.outputs.version }}
+      RELEASE_SHA: ${{ needs.release.outputs.sha }}
+    steps:
+      - name: Check documentation access
+        env:
+          SOURCE_TOKEN: ${{ secrets.DOCS_SOURCE_TOKEN }}
+        run: |
+          if [ -z "$SOURCE_TOKEN" ] || [ -z "$GH_TOKEN" ]; then
+            echo '::error::Configure DOCS_SOURCE_TOKEN (UAS-Common contents read) and WEBSITE_RELEASE_TOKEN (website contents, pull requests and actions write; statuses read) before enabling AUTOMATIC_DOCS.'
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+          lfs: true
+          submodules: false
+      - id: shared
+        run: echo "sha=$(git rev-parse 'HEAD:UAS Common')" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: Code-Stage/UAS-Common
+          ref: ${{ steps.shared.outputs.sha }}
+          path: UAS Common
+          token: ${{ secrets.DOCS_SOURCE_TOKEN }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: dotnet tool install --global docfx --version 2.78.3
+      - name: Build release documentation
+        run: bash 'UAS Common/ai-agent-guides/plugins/uas-shared/skills/ship-asset/scripts/build-docs.sh'
+      - uses: actions/checkout@v7
+        with:
+          repository: Code-Stage/codestage-website
+          path: .codex/work/website
+          token: ${{ secrets.WEBSITE_RELEASE_TOKEN }}
+      - name: Open website release PR
+        id: website
+        run: |
+          current=$(GH_TOKEN="$PRODUCT_TOKEN" python3 .github/scripts/product_release.py --check-current-release)
+          if [ "$current" != current ]; then
+            echo 'Skipping superseded release documentation'
+            echo 'superseded=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -C "$WEBSITE" config user.name "$(git log -1 --format=%an)"
+          git -C "$WEBSITE" config user.email "$(git log -1 --format=%ae)"
+          bash 'UAS Common/ai-agent-guides/plugins/uas-shared/skills/ship-asset/scripts/website-deploy.sh' --website "$WEBSITE" --yes
+      - name: Publish checked documentation and verify deployment
+        if: steps.website.outputs.superseded != 'true'
+        env:
+          WEBSITE_PR: ${{ steps.website.outputs.website_pr }}
+          WEBSITE_SHA: ${{ steps.website.outputs.website_sha }}
+        run: |
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if [ -n "$WEBSITE_PR" ]; then
+            head=$(gh pr view "$WEBSITE_PR" --repo Code-Stage/codestage-website --json headRefOid --jq .headRefOid)
+            for attempt in $(seq 1 30); do
+              # The website's PR validation runs in performance.yml; fine-grained PATs cannot use Checks.
+              check_run=$(gh run list --repo Code-Stage/codestage-website --workflow performance.yml --event pull_request --commit "$head" --json databaseId --jq '.[0].databaseId')
+              [ -n "$check_run" ] && break
+              sleep 2
+            done
+            [ -n "$check_run" ] || { echo 'Website PR validation did not start'; exit 1; }
+            gh run watch "$check_run" --repo Code-Stage/codestage-website --exit-status
+            current=$(GH_TOKEN="$PRODUCT_TOKEN" python3 .github/scripts/product_release.py --check-current-release)
+            if [ "$current" != current ]; then
+              gh pr close "$WEBSITE_PR" --repo Code-Stage/codestage-website
+              echo 'Skipping superseded release documentation'
+              exit 0
+            fi
+            gh pr merge "$WEBSITE_PR" --repo Code-Stage/codestage-website --merge --match-head-commit "$head"
+            merged=$(gh pr view "$WEBSITE_PR" --repo Code-Stage/codestage-website --json mergeCommit --jq .mergeCommit.oid)
+          else
+            [ -n "$WEBSITE_SHA" ] || { echo 'Website release result is missing'; exit 1; }
+            current=$(GH_TOKEN="$PRODUCT_TOKEN" python3 .github/scripts/product_release.py --check-current-release)
+            [ "$current" = current ] || { echo 'Skipping superseded release documentation'; exit 0; }
+            request="release-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            gh workflow run deploy-docs.yml --repo Code-Stage/codestage-website --ref main -f "release_request=$request"
+          fi
+          for attempt in $(seq 1 30); do
+            if [ -n "$WEBSITE_PR" ]; then
+              run=$(gh run list --repo Code-Stage/codestage-website --workflow deploy-docs.yml --commit "$merged" --created ">=$started" --json databaseId --jq '.[0].databaseId')
+            else
+              run=$(gh run list --repo Code-Stage/codestage-website --workflow deploy-docs.yml --event workflow_dispatch --created ">=$started" --json databaseId,displayTitle --jq ".[] | select(.displayTitle == \"Deploy docs $request\") | .databaseId")
+            fi
+            [ -n "$run" ] && break
+            sleep 2
+          done
+          [ -n "$run" ] || { echo 'Docs deployment did not start'; exit 1; }
+          gh run watch "$run" --repo Code-Stage/codestage-website --exit-status
