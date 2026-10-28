@@ -11,6 +11,11 @@ Changelog format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 
 💡 _Always remove previous plugin version before updating_
 
+## [Unreleased]
+
+### Fixed
+- Allow another import after Unity rejects a damaged package during native preparation.
+
 ## [1.3.1] - 2026-10-06
 
 ### Fixed

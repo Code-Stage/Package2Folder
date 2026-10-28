@@ -103,11 +103,97 @@ namespace CodeStage.PackageToFolder.Tests
         }
 
         [UnityTest]
+        public IEnumerator DamagedArchiveDoesNotImportAndAllowsRetry()
+        {
+            yield return PrepareExternalPackage();
+            var validArchive = File.ReadAllBytes(tempPackagePath);
+            var damagedArchive = new byte[validArchive.Length / 2];
+            Array.Copy(validArchive, damagedArchive, damagedArchive.Length);
+            File.WriteAllBytes(tempPackagePath, damagedArchive);
+            string failure = null;
+            var previousIgnore = LogAssert.ignoreFailingMessages;
+            Application.LogCallback recordFailure = (message, stack, type) =>
+            {
+                if ((type == LogType.Error || type == LogType.Exception) &&
+                    message.IndexOf("decompress", StringComparison.OrdinalIgnoreCase) >= 0) failure = message;
+            };
+            void RecordNativeFailure(string name, string error)
+            {
+                if (Path.GetFileName(name) == Path.GetFileNameWithoutExtension(tempPackagePath)) failure = error;
+            }
+            Application.logMessageReceived += recordFailure;
+            AssetDatabase.importPackageFailed += RecordNativeFailure;
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                try { Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, false); }
+                catch (Exception exception) { failure = exception.ToString(); }
+                yield return WaitFor(() => failure != null && !NativeImportPending(),
+                    "Unity did not reject the damaged archive and release the pending import");
+                Assert.IsFalse(File.Exists(ExpectedPath));
+                Assert.IsFalse(File.Exists(TestAssetPath));
+                Assert.IsEmpty(Resources.FindObjectsOfTypeAll(ImportWindowType));
+                Debug.Log("Damaged native archive rejection: " + failure);
+            }
+            finally
+            {
+                Application.logMessageReceived -= recordFailure;
+                AssetDatabase.importPackageFailed -= RecordNativeFailure;
+                LogAssert.ignoreFailingMessages = previousIgnore;
+                File.WriteAllBytes(tempPackagePath, validArchive);
+            }
+            Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, false);
+            yield return ValidateImport();
+            yield return WaitForCompanionToClose();
+        }
+
+#if UNITY_6000_5_OR_NEWER
+        [UnityTest]
+        public IEnumerator CancellationBeforeNativeWindowRedirectionClearsPendingAndAllowsRetry()
+        {
+            yield return PrepareExternalPackage();
+            var previousUpdates = NativeUpdateHandlers();
+            var cancelledWhilePending = false;
+            Exception cancellationError = null;
+            void CancelBeforeRedirection()
+            {
+                if (cancelledWhilePending || !NativeImportPending()) return;
+                var wizard = ImportWizard();
+                var path = (string)wizard.GetType().GetField("m_PackagePath", PrivateInstance).GetValue(wizard);
+                var nativeWindow = wizard.GetType().GetField("m_ImportWindow", PrivateInstance).GetValue(wizard) as EditorWindow;
+                if (nativeWindow == null || string.IsNullOrEmpty(path) || Path.GetFullPath(path) != Path.GetFullPath(tempPackagePath)) return;
+                cancelledWhilePending = true;
+                try { CancelNativeImport(); }
+                catch (Exception exception) { cancellationError = exception; }
+            }
+            // Observe the real native window before Package2Folder's later update callback redirects it.
+            EditorApplication.update += CancelBeforeRedirection;
+            try
+            {
+                Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, true);
+                yield return WaitFor(() => cancelledWhilePending && !NativeImportPending(),
+                    "Native cancellation before redirection did not release the pending import.");
+            }
+            finally { EditorApplication.update -= CancelBeforeRedirection; }
+            Assert.IsNull(cancellationError, cancellationError?.ToString());
+            Assert.IsTrue(cancelledWhilePending);
+            yield return WaitForCompanionToClose();
+            CollectionAssert.AreEquivalent(previousUpdates, NativeUpdateHandlers(),
+                "Pending cancellation left an Editor update handler subscribed.");
+            Assert.IsFalse(File.Exists(ExpectedPath));
+            Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, false);
+            yield return ValidateImport();
+            yield return WaitForCompanionToClose();
+        }
+#endif
+
+        [UnityTest]
         public IEnumerator InteractiveImportRejectsSecondImportAndSupportsCancelThenRetry()
         {
             yield return PrepareExternalPackage();
             Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, true);
             yield return WaitForImportWindow();
+            Assert.IsFalse(NativeImportPending(), "Prepared-window cancellation must run after native waiting ends.");
             AssertPreparedTarget(ExpectedPath);
             Assert.IsFalse(File.Exists(TestAssetPath), "Import wrote to the original path before confirmation");
             Assert.Throws<InvalidOperationException>(() =>
@@ -202,6 +288,13 @@ namespace CodeStage.PackageToFolder.Tests
 
         private static bool IsMenuEnabled() => (bool)typeof(Package2Folder)
             .GetMethod("IsImportToFolderCheck", PrivateStatic).Invoke(null, null);
+
+        private static bool NativeImportPending() => (bool)typeof(Package2Folder)
+            .GetField("nativeImportPending", PrivateStatic).GetValue(null);
+
+        private static Delegate[] NativeUpdateHandlers() => Array.FindAll(
+            EditorApplication.update?.GetInvocationList() ?? Array.Empty<Delegate>(), callback =>
+                callback.Method.DeclaringType?.FullName?.StartsWith(typeof(Package2Folder).FullName + "+", StringComparison.Ordinal) == true);
 
         private IEnumerator PrepareExternalPackage()
         {
