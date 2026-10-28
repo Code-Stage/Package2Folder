@@ -426,7 +426,7 @@ namespace CodeStage.PackageToFolder
 			void ImportFailed(string name, string error) { ImportCancelled(name); }
 			void ImportCancelled(string name)
 			{
-				if (name == Path.GetFileNameWithoutExtension(packagePath)) StopWaiting();
+				if (Path.GetFileName(name) == Path.GetFileNameWithoutExtension(packagePath)) StopWaiting();
 			}
 
 			void RedirectPreparedImport()
