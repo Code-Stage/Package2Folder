@@ -199,11 +199,30 @@ class GitHub:
         return json.loads(result.stdout) if result.stdout else None
 
 
+def write_release_outputs(plan):
+    output = os.environ.get('GITHUB_OUTPUT')
+    if output:
+        with open(output, 'a', encoding='utf-8') as file:
+            file.write(f"version={plan['version']}\nsha={plan['sha']}\n")
+
+
+def current_release(api, version, sha):
+    latest = api.request('releases/latest')
+    return (latest['tag_name'] == version
+            and api.request(f'commits/{version}')['sha'] == sha)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--check-pr', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--check-current-release', action='store_true')
     args = parser.parse_args()
+    if args.check_current_release:
+        api = GitHub(os.environ['GITHUB_REPOSITORY'])
+        current = current_release(api, os.environ['RELEASE_VERSION'], os.environ['RELEASE_SHA'])
+        print('current' if current else 'superseded')
+        return
     config = json.loads(Path('.github/product-release.json').read_text(encoding='utf-8-sig'))
     if args.check_pr:
         check_pr(config, json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()), Path.cwd())
@@ -223,6 +242,7 @@ def main():
     if not args.dry_run:
         git(Path.cwd(), 'fetch', 'origin', '--prune', '--tags')
         publish(Path.cwd(), config, plan, api)
+        write_release_outputs(plan)
 
 
 if __name__ == '__main__':

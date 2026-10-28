@@ -1,0 +1,12 @@
+{
+  "minimum": "2022.3",
+  "suites": [
+    {
+      "id": "native-import",
+      "project": "Tests/Unity~",
+      "platform": "EditMode",
+      "graphics": true,
+      "filter": "CodeStage.PackageToFolder.Tests.ImportPackageToFolderTests"
+    }
+  ]
+}
