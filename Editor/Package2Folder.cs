@@ -445,6 +445,21 @@ namespace CodeStage.PackageToFolder
 
 					var items = (object[])type.GetField("m_InitialImportItems", fields).GetValue(wizard);
 					if (items == null) return;
+#if UNITY_6000_6_OR_NEWER
+					if (!interactive)
+					{
+						var info = type.GetProperty("assetPackageInfo").GetValue(wizard);
+						var signature = info.GetType().GetProperty("signature").GetValue(info);
+						var status = signature.GetType().GetProperty("status").GetValue(signature).ToString();
+						if (status == "Invalid")
+						{
+							StopWaiting();
+							try { type.GetMethod("CancelImport").Invoke(wizard, null); }
+							catch (TargetInvocationException exception) when (exception.InnerException is ExitGUIException) { }
+							return;
+						}
+					}
+#endif
 					StopWaiting();
 					if (interactive) Package2FolderCompanion.ShowForImportWindow(window, folder);
 					foreach (var item in items) ChangeAssetItemPath(item, folder);
