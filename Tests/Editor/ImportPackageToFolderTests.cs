@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -20,6 +21,14 @@ namespace CodeStage.PackageToFolder.Tests
         private const double ImportTimeoutSeconds = 60;
         private const BindingFlags PrivateStatic = BindingFlags.Static | BindingFlags.NonPublic;
         private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+#if UNITY_6000_6_OR_NEWER
+        private const string SignedContent = "Package signature regression fixture.\n";
+        private const string SignedAssetGuid = "fd6f0ab538eb419a9e1973aa46d712b5";
+        private const string SignedFolderGuid = "31b886f879a44530a491ead1f17dd37d";
+        private const string SignedArchiveHash = "a7eb62db306d812de004e73e7eaaed7ce24796216fc8354c0b78c5032eb5e409";
+        private const string TamperedArchiveHash = "dad0d695d44d4cb19b110fd1f365afb66d5627e57680468c04d61ce563ae4a6e";
+        private const string SignedTargetPath = ImportTargetPath + "/OwnedFixture/provenance.txt";
+#endif
         private static readonly Type ImportWindowType = typeof(EditorWindow).Assembly.GetType("UnityEditor.PackageImport");
         private static readonly Type CompanionType = typeof(Package2Folder).Assembly.GetType("CodeStage.PackageToFolder.Package2FolderCompanion");
         private static readonly FieldInfo PickerField = typeof(Package2Folder).GetField("selectPackage", PrivateStatic);
@@ -28,6 +37,9 @@ namespace CodeStage.PackageToFolder.Tests
         private UnityEngine.Object previousSelection;
         private object previousPicker;
         private EditorWindow importWindow;
+#if UNITY_6000_6_OR_NEWER
+        private bool ownsSignedArtifacts;
+#endif
 
         private static string TestAssetPath => TestFolderPath + "/Nested/" + TestAssetName;
         private static string ExpectedPath => ImportTargetPath + "/Package2FolderTest/Nested/" + TestAssetName;
@@ -39,6 +51,9 @@ namespace CodeStage.PackageToFolder.Tests
         {
             previousSelection = Selection.activeObject;
             previousPicker = PickerField.GetValue(null);
+#if UNITY_6000_6_OR_NEWER
+            ownsSignedArtifacts = false;
+#endif
             CleanupTestArtifacts();
         }
 
@@ -52,6 +67,9 @@ namespace CodeStage.PackageToFolder.Tests
             foreach (var window in Resources.FindObjectsOfTypeAll(CompanionType))
                 ((EditorWindow)window).Close();
             if (tempPackagePath != null && File.Exists(tempPackagePath)) File.Delete(tempPackagePath);
+#if UNITY_6000_6_OR_NEWER
+            if (ownsSignedArtifacts) AssetDatabase.DeleteAsset("Assets/OwnedFixture");
+#endif
             CleanupTestArtifacts();
         }
 
@@ -74,6 +92,177 @@ namespace CodeStage.PackageToFolder.Tests
             yield return ValidateImport();
             AssertUnrelatedAsset(unrelatedGuid);
         }
+
+#if UNITY_6000_6_OR_NEWER
+        [UnityTest]
+        public IEnumerator SignedValidArchiveImportsSilentlyAndPreservesNativeSignature()
+        {
+            yield return PrepareSignedArchive("SignedValid.unitypackage", SignedArchiveHash);
+            var updates = NativeUpdateHandlers();
+            string signature = null, trust = null, error = null;
+            var observedWhilePending = false;
+            var observer = ObserveNativeSignature((status, level, code) =>
+            {
+                signature = status; trust = level; error = code;
+                observedWhilePending = NativeImportPending();
+            });
+            EditorApplication.update += observer;
+            try
+            {
+                Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, false);
+                yield return WaitFor(() => File.Exists(SignedTargetPath), "Signed asset did not reach its target.");
+            }
+            finally { EditorApplication.update -= observer; }
+            Assert.AreEqual("Valid", signature);
+            Assert.IsNotEmpty(trust, "Native trust status was not observed.");
+            Assert.AreNotEqual("Unchecked", trust);
+            Assert.AreEqual("None", error);
+            Assert.IsTrue(observedWhilePending, "Signature was not observed before redirection.");
+            Debug.Log($"Native signed fixture: signature={signature}; trust={trust}; error={error}");
+            yield return AssertSignedImport();
+            Assert.AreEqual(SignedArchiveHash, ArchiveHash(tempPackagePath));
+            Assert.IsFalse(NativeImportPending());
+            CollectionAssert.AreEquivalent(updates, NativeUpdateHandlers());
+            yield return WaitForCompanionToClose();
+        }
+
+        [UnityTest]
+        public IEnumerator TamperedSignedArchiveIsRejectedAndAllowsValidRetry()
+        {
+            yield return PrepareSignedArchive("SignatureTampered.unitypackage", TamperedArchiveHash);
+            var updates = NativeUpdateHandlers();
+            string signature = null, trust = null;
+            var rejected = false;
+            var completed = false;
+            var observer = ObserveNativeSignature((status, level, code) =>
+            {
+                signature = status; trust = level;
+                Debug.Log($"Native tampered fixture: signature={status}; trust={level}; error={code}");
+            });
+            bool Owns(string name) => Path.GetFileName(name) == Path.GetFileNameWithoutExtension(tempPackagePath);
+            void Cancelled(string name) { if (Owns(name)) rejected = true; }
+            void Failed(string name, string message) { if (Owns(name)) rejected = true; }
+            void Completed(string name) { if (Owns(name)) completed = true; }
+            EditorApplication.update += observer;
+            AssetDatabase.importPackageCancelled += Cancelled;
+            AssetDatabase.importPackageFailed += Failed;
+            AssetDatabase.importPackageCompleted += Completed;
+            try
+            {
+                Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, false);
+                yield return WaitFor(() => rejected || completed, "Invalid signature did not finish with a rejection.");
+                Assert.AreEqual("Invalid", signature, "The archive must fail signature validation, not decompression.");
+                Assert.IsNotEmpty(trust);
+                Assert.IsFalse(completed, "An invalid signed archive was silently imported.");
+                Assert.IsTrue(rejected);
+                Assert.IsFalse(NativeImportPending());
+                CollectionAssert.AreEquivalent(updates, NativeUpdateHandlers());
+                Assert.IsFalse(File.Exists(SignedTargetPath));
+                Assert.IsFalse(AssetDatabase.IsValidFolder(ImportTargetPath + "/OwnedFixture"));
+                Assert.IsFalse(Directory.Exists("Assets/OwnedFixture"));
+                Assert.IsEmpty(ExistingPathForGuid(SignedAssetGuid));
+                Assert.IsEmpty(ExistingPathForGuid(SignedFolderGuid));
+                Assert.AreEqual(TamperedArchiveHash, ArchiveHash(tempPackagePath));
+                yield return WaitForCompanionToClose();
+            }
+            finally
+            {
+                EditorApplication.update -= observer;
+                AssetDatabase.importPackageCancelled -= Cancelled;
+                AssetDatabase.importPackageFailed -= Failed;
+                AssetDatabase.importPackageCompleted -= Completed;
+            }
+            var previousTimestamp = File.GetLastWriteTimeUtc(tempPackagePath);
+            File.Copy(SignedFixtureSource("SignedValid.unitypackage"), tempPackagePath, true);
+            // Give the replacement a distinct timestamp so native validation does not reuse the previous result.
+            File.SetLastWriteTimeUtc(tempPackagePath, previousTimestamp.AddSeconds(2));
+            Assert.AreNotEqual(previousTimestamp, File.GetLastWriteTimeUtc(tempPackagePath));
+            Assert.AreEqual(SignedArchiveHash, ArchiveHash(tempPackagePath));
+            Package2Folder.ImportPackageToFolder(tempPackagePath, ImportTargetPath, false);
+            yield return AssertSignedImport();
+            Assert.IsFalse(NativeImportPending());
+            CollectionAssert.AreEquivalent(updates, NativeUpdateHandlers());
+            yield return WaitForCompanionToClose();
+        }
+
+        private IEnumerator PrepareSignedArchive(string name, string expectedHash)
+        {
+            Assert.IsFalse(Directory.Exists("Assets/OwnedFixture"), "A pre-existing fixture folder must not be changed.");
+            Assert.IsEmpty(ExistingPathForGuid(SignedAssetGuid));
+            Assert.IsEmpty(ExistingPathForGuid(SignedFolderGuid));
+            ownsSignedArtifacts = true;
+            var source = SignedFixtureSource(name);
+            Assert.AreEqual(expectedHash, ArchiveHash(source));
+            tempPackagePath = Path.Combine(Path.GetTempPath(), "SignedFixture_" + Guid.NewGuid().ToString("N") + ".unitypackage");
+            Assert.IsFalse(Path.GetFullPath(tempPackagePath).StartsWith(Path.GetFullPath(".") + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase), "Package must be outside the project.");
+            File.Copy(source, tempPackagePath);
+            AssetDatabase.CreateFolder("Assets", "ImportedAssets");
+            yield return null;
+        }
+
+        private static string ExistingPathForGuid(string guid)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            var existingGuid = AssetDatabase.AssetPathToGUID(path, AssetPathToGUIDOptions.OnlyExistingAssets);
+            if (!string.IsNullOrEmpty(path) && string.IsNullOrEmpty(existingGuid))
+            {
+                Assert.IsFalse(File.Exists(path) || Directory.Exists(path));
+                Debug.Log($"Signed fixture GUID lookup: cachedPath={path}; existingGuidEmpty=True");
+            }
+            return string.IsNullOrEmpty(existingGuid) ? string.Empty : path;
+        }
+
+        private static string SignedFixtureSource(string name)
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(Package2Folder).Assembly);
+            Assert.IsNotNull(package, "The signed fixture requires the testable local package.");
+            var embedded = Path.GetFullPath(Path.Combine(Application.dataPath, "../Packages", package.name, "Tests/Fixtures~", name));
+            if (File.Exists(embedded)) return embedded;
+            return Path.Combine(package.resolvedPath, "Tests/Fixtures~", name);
+        }
+
+        private EditorApplication.CallbackFunction ObserveNativeSignature(Action<string, string, string> capture)
+        {
+            var captured = false;
+            return () =>
+            {
+                if (captured) return;
+                try
+                {
+                    var wizard = ImportWizard();
+                    var path = (string)wizard.GetType().GetField("m_PackagePath", PrivateInstance).GetValue(wizard);
+                    if (string.IsNullOrEmpty(path) || Path.GetFullPath(path) != Path.GetFullPath(tempPackagePath)) return;
+                    var info = wizard.GetType().GetProperty("assetPackageInfo").GetValue(wizard);
+                    var signature = info?.GetType().GetProperty("signature").GetValue(info);
+                    if (signature == null) return;
+                    captured = true;
+                    capture(signature.GetType().GetProperty("status").GetValue(signature).ToString(),
+                        info.GetType().GetProperty("trustLevel").GetValue(info).ToString(),
+                        info.GetType().GetProperty("errorCode").GetValue(info).ToString());
+                }
+                catch (Exception exception) { captured = true; capture("OBSERVER_FAILED", exception.GetType().Name, "OBSERVER_FAILED"); }
+            };
+        }
+
+        private static IEnumerator AssertSignedImport()
+        {
+            yield return WaitFor(() => AssetDatabase.LoadAssetAtPath<TextAsset>(SignedTargetPath) != null,
+                "The signed text asset was not imported.");
+            Assert.AreEqual(SignedContent, File.ReadAllText(SignedTargetPath));
+            Assert.AreEqual(SignedAssetGuid, AssetDatabase.AssetPathToGUID(SignedTargetPath));
+            Assert.AreEqual(SignedFolderGuid, AssetDatabase.AssetPathToGUID(ImportTargetPath + "/OwnedFixture"));
+            Assert.AreEqual(SignedTargetPath, AssetDatabase.GUIDToAssetPath(SignedAssetGuid));
+            Assert.IsFalse(Directory.Exists("Assets/OwnedFixture"));
+        }
+
+        private static string ArchiveHash(string path)
+        {
+            using (var stream = File.OpenRead(path))
+            using (var hash = SHA256.Create())
+                return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+        }
+#endif
 
         [UnityTest]
         public IEnumerator ContextMenuImportsExternalPackageAfterNativeConfirmation()
