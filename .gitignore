@@ -26,3 +26,11 @@ Thumbs.db.meta
 JetBrains.Rider.Unity.Editor.Plugin.Repacked.dll*
 UserSettings/
 com.unity.asset-store-tools
+/Tests/Unity~/Assets/!Service/Editor/AssetStorePublisher/
+/Tests/Unity~/Assets/!Service/Editor/AssetStorePublisher.meta
+/Tests/Unity~/Assets/!Service/Editor.meta
+/Tests/Unity~/Assets/!Service.meta
+/.claude/work/
+/.codex/work/
+/Tests/Unity~/Packages/packages-lock.json
+/Tests/Unity~/ProjectSettings/*.asset
