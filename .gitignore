@@ -32,3 +32,5 @@ com.unity.asset-store-tools
 /Tests/Unity~/Assets/!Service.meta
 /.claude/work/
 /.codex/work/
+/Tests/Unity~/Packages/packages-lock.json
+/Tests/Unity~/ProjectSettings/*.asset
